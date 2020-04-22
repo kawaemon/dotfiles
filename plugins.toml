@@ -1,0 +1,18 @@
+[[plugins]]
+repo = 'Shougo/dein.vim'
+
+[[plugins]]
+repo = 'vim-airline/vim-airline'
+depends = ['vim-airline-themes']
+
+[[plugins]]
+repo = 'vim-airline/vim-airline-themes'
+hook_add = '''
+  let g:airline#extensions#tabline#enabled = 1
+  let g:airline_powerline_fonts = 1
+  let g:airline_theme = 'minimalist'
+'''
+
+[[plugins]]
+repo = 'preservim/nerdtree'
+

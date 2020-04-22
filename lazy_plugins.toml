@@ -1,0 +1,11 @@
+#  [[plugins]]
+#  repo = 'vim-airline/vim-airline'
+#  depends = ['vim-airline-themes']
+#
+#  [[plugins]]
+#  repo = 'vim-airline/vim-airline-themes'
+#  hook_post_source = '''
+#    let g:airline#extensions#tabline#enabled = 1
+#    let g:airline_solarized_bg='dark'
+#    call AirlineTheme solarized
+#  '''
