@@ -1,11 +1,9 @@
-#  [[plugins]]
-#  repo = 'vim-airline/vim-airline'
-#  depends = ['vim-airline-themes']
-#
-#  [[plugins]]
-#  repo = 'vim-airline/vim-airline-themes'
-#  hook_post_source = '''
-#    let g:airline#extensions#tabline#enabled = 1
-#    let g:airline_solarized_bg='dark'
-#    call AirlineTheme solarized
-#  '''
+[[plugins]]
+repo = 'pangloss/vim-javascript'
+on_ft = ['javascript']
+
+
+[[plugins]]
+repo = 'fatih/vim-go'
+on_ft = ['go']
+hook_post_update = 'GoInstallBinaries'
