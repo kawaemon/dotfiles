@@ -9,7 +9,7 @@ let s:DeinToml = s:VimrcDir . '/plugins.toml'
 let s:Lazy_DeinToml = s:VimrcDir . '/lazy_plugins.toml'
 
 if !isdirectory(s:DeinRepoDir) 
-  call system('git clone https://github.com/Shougo/dein.vim ' . shellescape(s:dein_repo_dir))
+  call system('git clone https://github.com/Shougo/dein.vim ' . shellescape(s:DeinRepoDir))
 endif
 
 let &runtimepath = s:DeinRepoDir . "," . &runtimepath
@@ -48,15 +48,21 @@ set showcmd
 set showmatch
 set background=dark
 set termguicolors
+
+hi Constant guifg=#CD9069
 hi Comment guifg=#6A9955
 hi Ignore guifg=#101010
 hi link EndOfBuffer Ignore
 hi LineNr guifg=#7F7F7F
+hi vimOper guifg=#FFFFFF
+hi vimParenSep guifg=#FFFFFF
 
+hi Identifier guifg=#9CDCFE
 hi Statement guifg=#499CD5
 hi Type guifg=#4EC9B0
 hi PreProc guifg=#4EC9B0
-
+hi Pmenu guibg=#262626
+hi PmenuSel guifg=#262626 guibg=#FFAF5F
 
 
 function! s:get_syn_id(transparent)

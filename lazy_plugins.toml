@@ -2,8 +2,49 @@
 repo = 'pangloss/vim-javascript'
 on_ft = ['javascript']
 
+[[plugins]]
+repo = 'neoclide/coc.nvim'
+merged = 0
+rev = 'release'
 
 [[plugins]]
-repo = 'fatih/vim-go'
+repo = 'neoclide/coc-highlight'
+build = 'yarn install --frozen-lockfile'
+
+[[plugins]]
+repo = 'josa42/coc-go'
+build = 'yarn install --frozen-lockfile'
+on_i = 1
 on_ft = ['go']
-hook_post_update = 'GoInstallBinaries'
+
+[[plugins]]
+repo = 'clangd/coc-clangd'
+build = 'yarn install --frozen-lockfile'
+on_i = 1
+on_ft = ['c', 'cpp']
+hook_add = '''
+  hi link cStorageClass Statement 
+  hi link cppStructure Statement
+  hi link cppType Statement
+'''
+
+[[plugins]]
+repo = 'voldikss/coc-cmake'
+build = 'yarn install --frozen-lockfile'
+on_i = 1
+on_ft = ['cmake']
+
+[[plugins]]
+repo = 'fannheyward/coc-rust-analyzer'
+build = 'yarn install --frozen-lockfile'
+on_i = 1
+on_ft = ['rust']
+
+[[plugins]]
+repo = 'cespare/vim-toml'
+on_ft = ['toml']
+hook_add = '''
+  hi link tomlTableArray Statement
+  hi link tomlTable Statement
+'''
+
