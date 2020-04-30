@@ -2,10 +2,6 @@
 repo = 'pangloss/vim-javascript'
 on_ft = ['javascript']
 
-[[plugins]]
-repo = 'neoclide/coc.nvim'
-merged = 0
-rev = 'release'
 
 [[plugins]]
 repo = 'neoclide/coc-highlight'
@@ -35,7 +31,7 @@ on_i = 1
 on_ft = ['cmake']
 
 [[plugins]]
-repo = 'fannheyward/coc-rust-analyzer'
+repo = 'neoclide/coc-rls'
 build = 'yarn install --frozen-lockfile'
 on_i = 1
 on_ft = ['rust']
@@ -48,3 +44,7 @@ hook_add = '''
   hi link tomlTable Statement
 '''
 
+[[plugins]]
+repo = 'neoclide/coc-json'
+on_i = 1
+on_ft = ['json']

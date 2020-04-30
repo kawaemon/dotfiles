@@ -19,3 +19,8 @@ hook_add = '''
 [[plugins]]
 repo = 'preservim/nerdtree'
 
+
+[[plugins]]
+repo = 'neoclide/coc.nvim'
+merged = 0
+rev = 'release'
