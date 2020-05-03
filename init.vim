@@ -35,6 +35,7 @@ inoremap <Down>  <Nop>
 inoremap <Left>  <Nop>
 inoremap <Right> <Nop>
 
+
 " use tab key for completation
 function! s:check_back_space() abort
   let col = col('.') - 1
@@ -46,7 +47,13 @@ inoremap <silent><expr> <TAB>
       \ coc#refresh()
 inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
 
+
+" coc-tsserver uses "typescript.tsx" filetype insted of "typescriptreact"
+au BufNewFile,BufRead *.tsx setf typescript.tsx
+
+
 autocmd CursorHold * silent call CocActionAsync('highlight')
+set updatetime=500 " threshold of CursorHold
 command! -nargs=0 Format :call CocAction('format') 
 command! -nargs=0 Import :call CocAction('runCommand', 'editor.action.organizeImport')
 
