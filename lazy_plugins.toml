@@ -47,6 +47,11 @@ build = 'yarn install --frozen-lockfile'
 on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
 
 [[plugins]]
+repo = 'josa42/coc-go'
+build = 'yarn install --frozen-lockfile'
+on_ft = ['go']
+
+[[plugins]]
 repo = 'cespare/vim-toml'
 on_ft = ['toml']
 hook_add = '''
