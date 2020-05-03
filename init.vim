@@ -57,6 +57,7 @@ set tabstop=2
 set shiftwidth=2
 set expandtab
 set autoindent
+set cursorline
 set number
 set nobackup
 set nowritebackup
@@ -85,6 +86,8 @@ hi PreProc guifg=#4EC9B0
 hi Pmenu guibg=#262626
 hi PmenuSel guifg=#262626 guibg=#FFAF5F
 hi SignColumn guibg=#101010
+hi CursorLine guibg=#262626
+hi CursorLineNR guifg=#9F9F9F
 
 " define SyntaxInfo command for adjusting syntax color.
 function! s:get_syn_id(transparent)
