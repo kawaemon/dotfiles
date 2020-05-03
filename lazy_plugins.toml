@@ -27,9 +27,15 @@ build = 'yarn install --frozen-lockfile'
 on_ft = ['cmake']
 
 [[plugins]]
-repo = 'neoclide/coc-rls'
+repo = 'fannheyward/coc-rust-analyzer'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['rust']
+hook_add = '''
+  hi rustModPathSep guifg=#FFFFFF
+  hi rustOperator guifg=#FFFFFF
+  hi link rustStorage Statement
+  hi rustDecNumber guifg=#B4CDA8
+'''
 
 [[plugins]]
 repo = 'neoclide/coc-json'
