@@ -48,6 +48,7 @@ inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
 
 autocmd CursorHold * silent call CocActionAsync('highlight')
 command! -nargs=0 Format :call CocAction('format') 
+command! -nargs=0 Import :call CocAction('runCommand', 'editor.action.organizeImport')
 
 filetype plugin indent on
 syntax on
@@ -57,12 +58,17 @@ set shiftwidth=2
 set expandtab
 set autoindent
 set number
+set nobackup
+set nowritebackup
 set hlsearch
 set ruler
 set showcmd
 set showmatch
 set background=dark
 set termguicolors
+set updatetime=300
+set signcolumn=yes
+set statusline^=%{coc#status()}%{get(b:,'coc_current_function','')}
 
 hi Constant guifg=#CD9069
 hi Comment guifg=#6A9955
@@ -78,8 +84,9 @@ hi Type guifg=#4EC9B0
 hi PreProc guifg=#4EC9B0
 hi Pmenu guibg=#262626
 hi PmenuSel guifg=#262626 guibg=#FFAF5F
+hi SignColumn guibg=#101010
 
-
+" define SyntaxInfo command for adjusting syntax color.
 function! s:get_syn_id(transparent)
   let synid = synID(line("."), col("."), 1)
   if a:transparent
