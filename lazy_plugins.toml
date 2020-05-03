@@ -45,9 +45,6 @@ on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
 repo = 'neoclide/coc-prettier'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
-hook_add = '''
-  command! -nargs=0 Format :CocCommand prettier.formatFile
-'''
 
 [[plugins]]
 repo = 'cespare/vim-toml'
