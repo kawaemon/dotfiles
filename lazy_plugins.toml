@@ -2,7 +2,6 @@
 repo = 'pangloss/vim-javascript'
 on_ft = ['javascript']
 
-
 [[plugins]]
 repo = 'neoclide/coc-highlight'
 build = 'yarn install --frozen-lockfile'
@@ -10,13 +9,11 @@ build = 'yarn install --frozen-lockfile'
 [[plugins]]
 repo = 'josa42/coc-go'
 build = 'yarn install --frozen-lockfile'
-on_i = 1
 on_ft = ['go']
 
 [[plugins]]
 repo = 'clangd/coc-clangd'
 build = 'yarn install --frozen-lockfile'
-on_i = 1
 on_ft = ['c', 'cpp']
 hook_add = '''
   hi link cStorageClass Statement 
@@ -27,14 +24,30 @@ hook_add = '''
 [[plugins]]
 repo = 'voldikss/coc-cmake'
 build = 'yarn install --frozen-lockfile'
-on_i = 1
 on_ft = ['cmake']
 
 [[plugins]]
 repo = 'neoclide/coc-rls'
 build = 'yarn install --frozen-lockfile'
-on_i = 1
 on_ft = ['rust']
+
+[[plugins]]
+repo = 'neoclide/coc-json'
+build = 'yarn install --frozen-lockfile'
+on_ft = ['json']
+
+[[plugins]]
+repo = 'neoclide/coc-tsserver'
+build = 'yarn install --frozen-lockfile'
+on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
+
+[[plugins]]
+repo = 'neoclide/coc-prettier'
+build = 'yarn install --frozen-lockfile'
+on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
+hook_add = '''
+  command! -nargs=0 Format :CocCommand prettier.formatFile
+'''
 
 [[plugins]]
 repo = 'cespare/vim-toml'
@@ -43,8 +56,3 @@ hook_add = '''
   hi link tomlTableArray Statement
   hi link tomlTable Statement
 '''
-
-[[plugins]]
-repo = 'neoclide/coc-json'
-on_i = 1
-on_ft = ['json']
