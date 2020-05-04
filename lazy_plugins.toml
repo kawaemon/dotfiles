@@ -27,7 +27,7 @@ build = 'yarn install --frozen-lockfile'
 on_ft = ['cmake']
 
 [[plugins]]
-repo = 'fannheyward/coc-rust-analyzer'
+repo = 'kawaemon/coc-rust-analyzer'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['rust']
 hook_add = '''

@@ -56,6 +56,7 @@ autocmd CursorHold * silent call CocActionAsync('highlight')
 set updatetime=500 " threshold of CursorHold
 command! -nargs=0 Format :call CocAction('format') 
 command! -nargs=0 Import :call CocAction('runCommand', 'editor.action.organizeImport')
+command! -nargs=0 Definition :call CocAction('jumpDefinition')
 
 filetype plugin indent on
 syntax on
@@ -94,7 +95,7 @@ hi Pmenu guibg=#262626
 hi PmenuSel guifg=#262626 guibg=#FFAF5F
 hi SignColumn guibg=#101010
 hi CursorLine guibg=#262626
-hi CursorLineNR guifg=#9F9F9F
+hi CursorLineNR guifg=#FFAF5F
 
 " define SyntaxInfo command for adjusting syntax color.
 function! s:get_syn_id(transparent)

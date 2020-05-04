@@ -24,3 +24,10 @@ repo = 'preservim/nerdtree'
 repo = 'neoclide/coc.nvim'
 merged = 0
 rev = 'release'
+
+[[plugins]]
+repo = 'easymotion/vim-easymotion'
+hook_add = '''
+  let g:EasyMotion_do_mapping = 0
+  nmap s <Plug>(easymotion-s2)
+'''
