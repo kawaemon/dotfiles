@@ -50,7 +50,7 @@ inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
 
 " coc-tsserver uses "typescript.tsx" filetype insted of "typescriptreact"
 au BufNewFile,BufRead *.tsx setf typescript.tsx
-
+au BufNewFile,BufRead *.kt setf kotlin
 
 autocmd CursorHold * silent call CocActionAsync('highlight')
 set updatetime=500 " threshold of CursorHold
@@ -61,8 +61,8 @@ command! -nargs=0 Definition :call CocAction('jumpDefinition')
 filetype plugin indent on
 syntax on
 
-set tabstop=2
-set shiftwidth=2
+set tabstop=4
+set shiftwidth=4
 set expandtab
 set autoindent
 set cursorline
@@ -77,6 +77,7 @@ set background=dark
 set termguicolors
 set updatetime=300
 set signcolumn=yes
+set clipboard=unnamed
 set statusline^=%{coc#status()}%{get(b:,'coc_current_function','')}
 
 hi Constant guifg=#CD9069

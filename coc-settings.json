@@ -1,5 +1,11 @@
 {
   "coc.preferences.formatOnSaveFiletypes": ["css", "markdown", "typescript"],
-  "rust-analyzer.trace.server": "verbose"
+  "rust-analyzer.trace.server": "verbose",
+  "languageserver": {
+    "kotlin": {
+      "command": "kotlin-language-server",
+      "filetypes": ["kotlin"]
+    }
+  }
 }
 

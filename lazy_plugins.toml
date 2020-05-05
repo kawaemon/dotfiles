@@ -64,3 +64,7 @@ hook_add = '''
   hi link tomlTableArray Statement
   hi link tomlTable Statement
 '''
+
+[[plugins]]
+repo = 'udalov/kotlin-vim'
+on_ft = ['kotlin']
