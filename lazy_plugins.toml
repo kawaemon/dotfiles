@@ -15,7 +15,7 @@ on_ft = ['go']
 repo = 'clangd/coc-clangd'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['c', 'cpp']
-hook_add = '''
+hook_source = '''
   hi link cStorageClass Statement 
   hi link cppStructure Statement
   hi link cppType Statement
@@ -30,22 +30,34 @@ on_ft = ['cmake']
 repo = 'kawaemon/coc-rust-analyzer'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['rust']
-hook_add = '''
+hook_source = '''
   hi rustModPathSep guifg=#FFFFFF
   hi rustOperator guifg=#FFFFFF
   hi link rustStorage Statement
   hi rustDecNumber guifg=#B4CDA8
 '''
 
+
 [[plugins]]
 repo = 'neoclide/coc-json'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['json']
 
+
 [[plugins]]
 repo = 'neoclide/coc-tsserver'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
+
+[[plugins]]
+repo = 'peitalin/vim-jsx-typescript'
+depends = ['leafgarland/typescript-vim']
+on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
+
+[[plugins]]
+repo = 'leafgarland/typescript-vim'
+on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
+
 
 [[plugins]]
 repo = 'neoclide/coc-prettier'
@@ -60,7 +72,7 @@ on_ft = ['go']
 [[plugins]]
 repo = 'cespare/vim-toml'
 on_ft = ['toml']
-hook_add = '''
+hook_source = '''
   hi link tomlTableArray Statement
   hi link tomlTable Statement
 '''
