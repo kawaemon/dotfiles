@@ -58,11 +58,20 @@ on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
 repo = 'leafgarland/typescript-vim'
 on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
 
-
 [[plugins]]
 repo = 'neoclide/coc-prettier'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
+
+[[plugins]]
+repo = 'neoclide/coc-css'
+build = 'yarn install --frozen-lockfile'
+on_ft = ['css', 'scss', 'sass']
+
+[[plugins]]
+repo = 'neoclide/coc-html'
+build = 'yarn install --frozen-lockfile'
+on_ft = ['html']
 
 [[plugins]]
 repo = 'josa42/coc-go'
@@ -80,3 +89,15 @@ hook_source = '''
 [[plugins]]
 repo = 'udalov/kotlin-vim'
 on_ft = ['kotlin']
+
+[[plugins]]
+repo = 'plasticboy/vim-markdown'
+on_ft = ['markdown']
+
+[[plugins]]
+repo = 'previm/previm'
+on_ft = ['markdown']
+hook_source = '''
+  let g:previm_open_cmd = 'chromium'
+  let g:vim_markdown_folding_disabled = 1
+'''

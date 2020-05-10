@@ -78,7 +78,6 @@ set termguicolors
 set updatetime=300
 set signcolumn=yes
 set clipboard=unnamed
-set statusline^=%{coc#status()}%{get(b:,'coc_current_function','')}
 
 hi Constant guifg=#CD9069
 hi Comment guifg=#6A9955
