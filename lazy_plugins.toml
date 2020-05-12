@@ -35,6 +35,8 @@ hook_source = '''
   hi rustOperator guifg=#FFFFFF
   hi link rustStorage Statement
   hi rustDecNumber guifg=#B4CDA8
+  hi link rustBoolean Statement
+  hi link rustSelf Statement
 '''
 
 
@@ -81,6 +83,9 @@ on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
 repo = 'neoclide/coc-css'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['css', 'scss', 'sass']
+hook_source = '''
+  hi cssBraces guifg=#FFFFFF
+'''
 
 [[plugins]]
 repo = 'neoclide/coc-html'
