@@ -48,11 +48,24 @@ on_ft = ['json']
 repo = 'neoclide/coc-tsserver'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
+hook_source = '''
+  hi link typescriptStorageClass Statement
+  hi typescriptEndColons guifg=#FFFFFF
+  hi typescriptBraces guifg=#FFFFFF
+  hi typescriptParens guifg=#FFFFFF
+  hi typescriptOpSymbols guifg=#FFFFFF
+'''
 
 [[plugins]]
 repo = 'peitalin/vim-jsx-typescript'
 depends = ['leafgarland/typescript-vim']
 on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
+hook_source = '''
+  hi tsxTag guifg=#FFFFFF
+  hi tsxTagName guifg=#E06C75
+  hi link tsxCloseTagName tsxTagName
+  hi link tsxAttrib Identifier
+'''
 
 [[plugins]]
 repo = 'leafgarland/typescript-vim'
@@ -62,6 +75,7 @@ on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
 repo = 'neoclide/coc-prettier'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
+
 
 [[plugins]]
 repo = 'neoclide/coc-css'
@@ -93,6 +107,9 @@ on_ft = ['kotlin']
 [[plugins]]
 repo = 'plasticboy/vim-markdown'
 on_ft = ['markdown']
+hook_source = '''
+  hi link mkdHeading Identifier
+'''
 
 [[plugins]]
 repo = 'previm/previm'

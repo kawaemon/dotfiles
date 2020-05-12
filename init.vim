@@ -1,3 +1,5 @@
+lang ja_JP.UTF-8
+set encoding=utf-8
 if &compatible
   set nocompatible
 endif
@@ -88,6 +90,7 @@ hi vimOper guifg=#FFFFFF
 hi vimParenSep guifg=#FFFFFF
 
 hi Identifier guifg=#9CDCFE
+hi Title guifg=#9CDCFE
 hi Statement guifg=#499CD5
 hi Type guifg=#4EC9B0
 hi PreProc guifg=#4EC9B0
