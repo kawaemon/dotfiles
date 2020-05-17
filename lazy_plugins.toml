@@ -44,6 +44,11 @@ hook_source = '''
 repo = 'neoclide/coc-json'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['json']
+hook_source = '''
+  hi link jsonQuote String
+  hi link jsonKeyword Identifier
+  hi jsonBraces guifg=#FFFFFF
+'''
 
 
 [[plugins]]
