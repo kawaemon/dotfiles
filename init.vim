@@ -79,7 +79,7 @@ set background=dark
 set termguicolors
 set updatetime=300
 set signcolumn=yes
-set clipboard=unnamed
+set clipboard+=unnamed
 
 hi Constant guifg=#CD9069
 hi Comment guifg=#6A9955
