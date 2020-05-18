@@ -5,6 +5,14 @@
     "kotlin": {
       "command": "kotlin-language-server",
       "filetypes": ["kotlin"]
+    },
+    "elmLS": {
+      "command": "elm-language-server",
+      "filetypes": ["elm"],
+      "rootPatterns": ["elm.json"],
+      "initializationOptions": {
+        "elmAnalyseTrigger": "change"
+      }
     }
   }
 }

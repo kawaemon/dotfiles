@@ -128,3 +128,16 @@ hook_source = '''
   let g:previm_open_cmd = 'chromium'
   let g:vim_markdown_folding_disabled = 1
 '''
+
+[[plugins]]
+repo = 'andys8/vim-elm-syntax.git'
+on_ft = ['elm']
+hook_source = '''
+  hi link elmImport Statement
+  hi link elmTypedef Statement
+  hi link elmAlias Statement
+  hi elmBraces guifg=#FFFFFF
+  hi elmDelimiter guifg=#FFFFFF
+  hi elmOperator guifg=#FFFFFF
+'''
+
