@@ -3,10 +3,6 @@ repo = 'pangloss/vim-javascript'
 on_ft = ['javascript']
 
 [[plugins]]
-repo = 'neoclide/coc-highlight'
-build = 'yarn install --frozen-lockfile'
-
-[[plugins]]
 repo = 'josa42/coc-go'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['go']
@@ -27,10 +23,15 @@ build = 'yarn install --frozen-lockfile'
 on_ft = ['cmake']
 
 [[plugins]]
-repo = 'kawaemon/coc-rust-analyzer'
+repo = 'fannheyward/coc-rust-analyzer'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['rust']
+
+[[plugins]]
+repo = 'rust-lang/rust.vim'
+on_ft = ['rust']
 hook_source = '''
+  let g:rustfmt_autosave = 1
   hi rustModPathSep guifg=#FFFFFF
   hi rustOperator guifg=#FFFFFF
   hi link rustStorage Statement
@@ -38,7 +39,6 @@ hook_source = '''
   hi link rustBoolean Statement
   hi link rustSelf Statement
 '''
-
 
 [[plugins]]
 repo = 'neoclide/coc-json'
@@ -162,3 +162,11 @@ hook_source = '''
   hi yamlKeyValueDelimiter guifg=#FFFFFF
 '''
 
+[[plugins]]
+repo = 'scalameta/coc-metals'
+build = 'yarn install --frozen-lockfile'
+on_ft = ['scala']
+
+[[plugins]]
+repo = 'derekwyatt/vim-scala'
+on_ft = ['scala']

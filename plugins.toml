@@ -27,10 +27,15 @@ rev = 'release'
 
 
 [[plugins]]
+repo = 'neoclide/coc-highlight'
+build = 'yarn install --frozen-lockfile'
+
+
+[[plugins]]
 repo = 'easymotion/vim-easymotion'
 hook_add = '''
   let g:EasyMotion_do_mapping = 0
-  nmap s <Plug>(easymotion-s2)
+  nmap ss <Plug>(easymotion-s2)
 '''
 
 
@@ -40,3 +45,4 @@ depends = ['Shougo/context_filetype.vim']
 
 [[plugins]]
 repo = 'Shougo/context_filetype.vim'
+

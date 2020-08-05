@@ -1,6 +1,6 @@
 {
   "coc.preferences.formatOnSaveFiletypes": ["css", "markdown", "typescript"],
-  "rust-analyzer.trace.server": "verbose",
+  "rust-analyzer.inlayHints.chainingHints": false,
   "languageserver": {
     "kotlin": {
       "command": "kotlin-language-server",

@@ -37,6 +37,12 @@ inoremap <Down>  <Nop>
 inoremap <Left>  <Nop>
 inoremap <Right> <Nop>
 
+" use sh and sl for switching buffers
+nnoremap <silent> sh :bp<CR>
+nnoremap <silent> sl :bn<CR>
+
+" use esc-esc for remove search highlight
+nnoremap <silent> <Esc><Esc> :<C-u>nohlsearch<CR>
 
 " use tab key for completation
 function! s:check_back_space() abort
