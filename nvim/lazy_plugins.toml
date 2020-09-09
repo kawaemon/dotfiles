@@ -32,12 +32,6 @@ repo = 'rust-lang/rust.vim'
 on_ft = ['rust']
 hook_source = '''
   let g:rustfmt_autosave = 1
-  hi rustModPathSep guifg=#FFFFFF
-  hi rustOperator guifg=#FFFFFF
-  hi link rustStorage Statement
-  hi rustDecNumber guifg=#B4CDA8
-  hi link rustBoolean Statement
-  hi link rustSelf Statement
 '''
 
 [[plugins]]

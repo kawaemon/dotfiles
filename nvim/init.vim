@@ -4,27 +4,37 @@ if &compatible
   set nocompatible
 endif
 
-let s:VimrcDir = expand('<sfile>:p:h')
-let s:DeinDir = s:VimrcDir . '/dein'
-let s:DeinRepoDir = s:DeinDir . '/repos/github.com/Shougo/dein.vim'
-let s:DeinToml = s:VimrcDir . '/plugins.toml'
-let s:Lazy_DeinToml = s:VimrcDir . '/lazy_plugins.toml'
+if $NVIM_NO_PLUGIN != '1'
+    let s:vimrc_dir = expand('<sfile>:p:h')
+    let s:dein_dir = s:vimrc_dir. '/dein'
+    let s:dein_repo_dir = s:dein_dir . '/repos/github.com/Shougo/dein.vim'
 
-if !isdirectory(s:DeinRepoDir) 
-  call system('git clone https://github.com/Shougo/dein.vim ' . shellescape(s:DeinRepoDir))
-endif
+    let s:minimum_plugins = s:vimrc_dir . '/minimum_plugins.toml'
+    let s:plugins = s:vimrc_dir . '/plugins.toml'
+    let s:lazy_plugins = s:vimrc_dir . '/lazy_plugins.toml'
 
-let &runtimepath = s:DeinRepoDir . "," . &runtimepath
-if dein#load_state(s:DeinDir)
-  call dein#begin(s:DeinDir)
-  call dein#load_toml(s:DeinToml, {'lazy': 0})
-  call dein#load_toml(s:Lazy_DeinToml, {'lazy': 1})
-  call dein#end()
-  call dein#save_state()
-endif
+    if !isdirectory(s:dein_repo_dir) 
+        call system('git clone https://github.com/Shougo/dein.vim ' . shellescape(s:dein_repo_dir))
+    endif
+    
+    let &runtimepath = s:dein_repo_dir . "," . &runtimepath
+    if dein#load_state(s:dein_dir)
+        call dein#begin(s:dein_dir)
 
-if dein#check_install() 
-  call dein#install()
+        call dein#load_toml(s:minimum_plugins, {'lazy': 0})
+
+        if $NVIM_MINIMUM_PLUGIN != '1'
+            call dein#load_toml(s:plugins, {'lazy': 0})
+            call dein#load_toml(s:lazy_plugins, {'lazy': 1})
+        endif
+
+        call dein#end()
+        call dein#save_state()
+    endif
+    
+    if dein#check_install() 
+        call dein#install()
+    endif
 endif
 
 " disable arrow keys.
@@ -44,28 +54,6 @@ nnoremap <silent> sl :bn<CR>
 " use esc-esc for remove search highlight
 nnoremap <silent> <Esc><Esc> :<C-u>nohlsearch<CR>
 
-" use tab key for completation
-function! s:check_back_space() abort
-  let col = col('.') - 1
-  return !col || getline('.')[col - 1]  =~# '\s'
-endfunction
-inoremap <silent><expr> <TAB>
-      \ pumvisible() ? "\<C-n>" :
-      \ <SID>check_back_space() ? "\<TAB>" :
-      \ coc#refresh()
-inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
-
-
-" coc-tsserver uses "typescript.tsx" filetype insted of "typescriptreact"
-au BufNewFile,BufRead *.tsx setf typescript.tsx
-au BufNewFile,BufRead *.kt setf kotlin
-
-autocmd CursorHold * silent call CocActionAsync('highlight')
-set updatetime=500 " threshold of CursorHold
-command! -nargs=0 Format :call CocAction('format') 
-command! -nargs=0 Import :call CocAction('runCommand', 'editor.action.organizeImport')
-command! -nargs=0 Definition :call CocAction('jumpDefinition')
-
 filetype plugin indent on
 syntax on
 
@@ -73,6 +61,7 @@ set tabstop=4
 set shiftwidth=4
 set expandtab
 set autoindent
+set autoread
 set cursorline
 set number
 set nobackup
@@ -106,6 +95,13 @@ hi PmenuSel guifg=#262626 guibg=#FFAF5F
 hi SignColumn guibg=#101010
 hi CursorLine guibg=#262626
 hi CursorLineNR guifg=#FFAF5F
+
+hi rustModPathSep guifg=#FFFFFF
+hi rustOperator guifg=#FFFFFF
+hi link rustStorage Statement
+hi rustDecNumber guifg=#B4CDA8
+hi link rustBoolean Statement
+hi link rustSelf Statement
 
 " define SyntaxInfo command for adjusting syntax color.
 function! s:get_syn_id(transparent)

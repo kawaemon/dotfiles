@@ -21,28 +21,8 @@ repo = 'preservim/nerdtree'
 
 
 [[plugins]]
-repo = 'neoclide/coc.nvim'
-merged = 0
-rev = 'release'
-
-
-[[plugins]]
-repo = 'neoclide/coc-highlight'
-build = 'yarn install --frozen-lockfile'
-
-
-[[plugins]]
 repo = 'easymotion/vim-easymotion'
 hook_add = '''
   let g:EasyMotion_do_mapping = 0
   nmap ss <Plug>(easymotion-s2)
 '''
-
-
-[[plugins]]
-repo = 'osyo-manga/vim-precious'
-depends = ['Shougo/context_filetype.vim']
-
-[[plugins]]
-repo = 'Shougo/context_filetype.vim'
-
