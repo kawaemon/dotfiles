@@ -1,0 +1,12 @@
+[core]
+    excludesfile = /Users/kawak/.gitignore_global
+
+[user]
+	email = 34652535+kawaemon@users.noreply.github.com
+
+[alias]
+    s = status
+    p = push
+    c = commit
+    ch = checkout
+    b = branch
