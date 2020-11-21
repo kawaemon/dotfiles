@@ -2,11 +2,20 @@
     excludesfile = /Users/kawak/.gitignore_global
 
 [user]
-	email = 34652535+kawaemon@users.noreply.github.com
+    email = 34652535+kawaemon@users.noreply.github.com
+    name = kawaemon
+    signingKey = 7BB97A8CB456140E5DF3E9A1BD3245B1A7C7F65F
 
 [alias]
+    a = add
     s = status
     p = push
     c = commit
     ch = checkout
     b = branch
+
+[commit]
+    gpgsign = true
+
+[pull]
+    ff = only
