@@ -4,6 +4,25 @@ if &compatible
   set nocompatible
 endif
 
+set tabstop=4
+set shiftwidth=4
+set expandtab
+set autoindent
+set autoread
+set cursorline
+set number
+set nobackup
+set nowritebackup
+set hlsearch
+set ruler
+set showcmd
+set showmatch
+set background=dark
+set termguicolors
+set updatetime=300
+set signcolumn=yes
+set clipboard+=unnamed
+
 if $NVIM_NO_PLUGIN != '1'
     let s:vimrc_dir = expand('<sfile>:p:h')
     let s:dein_dir = s:vimrc_dir. '/dein'
@@ -23,10 +42,8 @@ if $NVIM_NO_PLUGIN != '1'
 
         call dein#load_toml(s:minimum_plugins, {'lazy': 0})
 
-        if $NVIM_MINIMUM_PLUGIN != '1'
-            call dein#load_toml(s:plugins, {'lazy': 0})
-            call dein#load_toml(s:lazy_plugins, {'lazy': 1})
-        endif
+        call dein#load_toml(s:plugins, {'lazy': 0})
+        call dein#load_toml(s:lazy_plugins, {'lazy': 1})
 
         call dein#end()
         call dein#save_state()
@@ -57,51 +74,12 @@ nnoremap <silent> <Esc><Esc> :<C-u>nohlsearch<CR>
 filetype plugin indent on
 syntax on
 
-set tabstop=4
-set shiftwidth=4
-set expandtab
-set autoindent
-set autoread
-set cursorline
-set number
-set nobackup
-set nowritebackup
-set hlsearch
-set ruler
-set showcmd
-set showmatch
-set background=dark
-set termguicolors
-set updatetime=300
-set signcolumn=yes
-set clipboard+=unnamed
+colorscheme xcodedarkhc 
 
-hi Constant guifg=#CD9069
-hi Comment guifg=#6A9955
-hi Ignore guifg=#101010
-hi link EndOfBuffer Ignore
-hi LineNr guifg=#7F7F7F
-hi vimOper guifg=#FFFFFF
-hi vimParenSep guifg=#FFFFFF
-
-hi Identifier guifg=#9CDCFE
-hi Title guifg=#9CDCFE
-hi Statement guifg=#499CD5
-hi Type guifg=#4EC9B0
-hi Number guifg=#B4CDA8
-hi PreProc guifg=#4EC9B0
-hi Pmenu guibg=#262626
-hi PmenuSel guifg=#262626 guibg=#FFAF5F
-hi SignColumn guibg=#101010
-hi CursorLine guibg=#262626
-hi CursorLineNR guifg=#FFAF5F
-
-hi rustModPathSep guifg=#FFFFFF
-hi rustOperator guifg=#FFFFFF
-hi link rustStorage Statement
-hi rustDecNumber guifg=#B4CDA8
-hi link rustBoolean Statement
-hi link rustSelf Statement
+" coc-tsserver uses "typescript.tsx" filetype insted of "typescriptreact"
+au BufNewFile,BufRead *.tsx setf typescript.tsx
+au BufNewFile,BufRead *.kt setf kotlin
+au BufNewFile,BufRead *.toml setf toml
 
 " define SyntaxInfo command for adjusting syntax color.
 function! s:get_syn_id(transparent)

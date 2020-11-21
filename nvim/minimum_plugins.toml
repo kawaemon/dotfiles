@@ -1,11 +1,9 @@
 [[plugins]]
 repo = 'Shougo/dein.vim'
 
-
 [[plugins]]
 repo = 'vim-airline/vim-airline'
 depends = ['vim-airline-themes']
-
 
 [[plugins]]
 repo = 'vim-airline/vim-airline-themes'
@@ -15,10 +13,8 @@ hook_add = '''
   let g:airline_theme = 'minimalist'
 '''
 
-
 [[plugins]]
 repo = 'preservim/nerdtree'
-
 
 [[plugins]]
 repo = 'easymotion/vim-easymotion'
@@ -26,3 +22,12 @@ hook_add = '''
   let g:EasyMotion_do_mapping = 0
   nmap ss <Plug>(easymotion-s2)
 '''
+
+[[plugins]]
+repo = 'arzg/vim-colors-xcode'
+
+[[plugins]]
+repo = 'vim-jp/vimdoc-ja'
+
+[[plugins]]
+repo = 'airblade/vim-gitgutter'

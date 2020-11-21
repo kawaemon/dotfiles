@@ -11,11 +11,6 @@ on_ft = ['go']
 repo = 'clangd/coc-clangd'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['c', 'cpp']
-hook_source = '''
-  hi link cStorageClass Statement 
-  hi link cppStructure Statement
-  hi link cppType Statement
-'''
 
 [[plugins]]
 repo = 'voldikss/coc-cmake'
@@ -38,35 +33,17 @@ hook_source = '''
 repo = 'neoclide/coc-json'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['json']
-hook_source = '''
-  hi link jsonQuote String
-  hi link jsonKeyword Identifier
-  hi jsonBraces guifg=#FFFFFF
-'''
 
 
 [[plugins]]
 repo = 'neoclide/coc-tsserver'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
-hook_source = '''
-  hi link typescriptStorageClass Statement
-  hi typescriptEndColons guifg=#FFFFFF
-  hi typescriptBraces guifg=#FFFFFF
-  hi typescriptParens guifg=#FFFFFF
-  hi typescriptOpSymbols guifg=#FFFFFF
-'''
 
 [[plugins]]
 repo = 'peitalin/vim-jsx-typescript'
 depends = ['leafgarland/typescript-vim']
 on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
-hook_source = '''
-  hi tsxTag guifg=#FFFFFF
-  hi tsxTagName guifg=#E06C75
-  hi link tsxCloseTagName tsxTagName
-  hi link tsxAttrib Identifier
-'''
 
 [[plugins]]
 repo = 'leafgarland/typescript-vim'
@@ -77,14 +54,10 @@ repo = 'neoclide/coc-prettier'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
 
-
 [[plugins]]
 repo = 'neoclide/coc-css'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['css', 'scss', 'sass']
-hook_source = '''
-  hi cssBraces guifg=#FFFFFF
-'''
 
 [[plugins]]
 repo = 'neoclide/coc-html'
@@ -99,10 +72,6 @@ on_ft = ['go']
 [[plugins]]
 repo = 'cespare/vim-toml'
 on_ft = ['toml']
-hook_source = '''
-  hi link tomlTableArray Statement
-  hi link tomlTable Statement
-'''
 
 [[plugins]]
 repo = 'udalov/kotlin-vim'
@@ -111,9 +80,6 @@ on_ft = ['kotlin']
 [[plugins]]
 repo = 'plasticboy/vim-markdown'
 on_ft = ['markdown']
-hook_source = '''
-  hi link mkdHeading Identifier
-'''
 
 [[plugins]]
 repo = 'previm/previm'
@@ -126,14 +92,6 @@ hook_source = '''
 [[plugins]]
 repo = 'andys8/vim-elm-syntax.git'
 on_ft = ['elm']
-hook_source = '''
-  hi link elmImport Statement
-  hi link elmTypedef Statement
-  hi link elmAlias Statement
-  hi elmBraces guifg=#FFFFFF
-  hi elmDelimiter guifg=#FFFFFF
-  hi elmOperator guifg=#FFFFFF
-'''
 
 [[plugins]]
 repo = 'neoclide/coc-python'
@@ -145,16 +103,12 @@ repo = 'vim-python/python-syntax'
 on_ft = ['python']
 hook_source = '''
   let g:python_highlight_all = 1
-  hi pythonOperator guifg=#FFFFFF
 '''
 
 [[plugins]]
 repo = 'neoclide/coc-yaml'
 build = 'yarn install --frozen-lockfile'
 on_ft = ['yaml']
-hook_source = '''
-  hi yamlKeyValueDelimiter guifg=#FFFFFF
-'''
 
 [[plugins]]
 repo = 'scalameta/coc-metals'
