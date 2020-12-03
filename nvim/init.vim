@@ -32,10 +32,10 @@ if $NVIM_NO_PLUGIN != '1'
     let s:plugins = s:vimrc_dir . '/plugins.toml'
     let s:lazy_plugins = s:vimrc_dir . '/lazy_plugins.toml'
 
-    if !isdirectory(s:dein_repo_dir) 
+    if !isdirectory(s:dein_repo_dir)
         call system('git clone https://github.com/Shougo/dein.vim ' . shellescape(s:dein_repo_dir))
     endif
-    
+
     let &runtimepath = s:dein_repo_dir . "," . &runtimepath
     if dein#load_state(s:dein_dir)
         call dein#begin(s:dein_dir)
@@ -48,8 +48,8 @@ if $NVIM_NO_PLUGIN != '1'
         call dein#end()
         call dein#save_state()
     endif
-    
-    if dein#check_install() 
+
+    if dein#check_install()
         call dein#install()
     endif
 endif
@@ -74,7 +74,13 @@ nnoremap <silent> <Esc><Esc> :<C-u>nohlsearch<CR>
 filetype plugin indent on
 syntax on
 
-colorscheme xcodedarkhc 
+colorscheme xcodedarkhc
+hi Normal guibg=NONE ctermbg=NONE
+hi EndOfBuffer guibg=NONE ctermbg=NONE
+
+" https://mickey24.hatenablog.com/entry/20120808/vim_highlight_trailing_spaces
+hi link TrailingSpaces Error
+match TrailingSpaces /\s\+$/
 
 " coc-tsserver uses "typescript.tsx" filetype insted of "typescriptreact"
 au BufNewFile,BufRead *.tsx setf typescript.tsx
