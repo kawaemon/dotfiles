@@ -64,12 +64,18 @@ inoremap <Down>  <Nop>
 inoremap <Left>  <Nop>
 inoremap <Right> <Nop>
 
-" use sh and sl for switching buffers
+" use sh and sl to switch between buffers
 nnoremap <silent> sh :bp<CR>
 nnoremap <silent> sl :bn<CR>
 
+" use w{h,j,k,l} to switch between panels
+nnoremap wh <C-w>w
+nnoremap wj <C-w>j
+nnoremap wk <C-w>k
+nnoremap wl <C-w>l
+
 " use esc-esc for remove search highlight
-nnoremap <silent> <Esc><Esc> :<C-u>nohlsearch<CR>
+nnoremap <silent> <Esc><Esc> :nohlsearch<CR>
 
 filetype plugin indent on
 syntax on
