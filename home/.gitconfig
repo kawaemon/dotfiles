@@ -1,5 +1,6 @@
 [core]
     excludesfile = /Users/kawak/.gitignore_global
+    pager = delta
 
 [user]
     email = 34652535+kawaemon@users.noreply.github.com
@@ -23,3 +24,10 @@
 [init]
 	defaultBranch = master
 
+[delta]
+    plus-color = "#012800"
+    minus-color = "#340001"
+    syntax-theme = Nord
+
+[interactive]
+    diffFilter = delta --color-only
