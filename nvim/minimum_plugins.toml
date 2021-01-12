@@ -3,25 +3,20 @@ repo = 'Shougo/dein.vim'
 
 [[plugins]]
 repo = 'vim-airline/vim-airline'
-depends = ['vim-airline-themes']
-
-[[plugins]]
-repo = 'vim-airline/vim-airline-themes'
 hook_add = '''
   let g:airline#extensions#tabline#enabled = 1
   let g:airline_powerline_fonts = 1
-  let g:airline_theme = 'minimalist'
 '''
 
 [[plugins]]
 repo = 'nvim-treesitter/nvim-treesitter'
 hook_add = '''
 lua <<EOF
-require'nvim-treesitter.configs'.setup {
-    highlight = {
-      enable = true
+  require'nvim-treesitter.configs'.setup {
+      highlight = {
+        enable = true
+      }
     }
-  }
 EOF
 '''
 
@@ -36,10 +31,24 @@ hook_add = '''
 '''
 
 [[plugins]]
-repo = 'arzg/vim-colors-xcode'
-
-[[plugins]]
 repo = 'vim-jp/vimdoc-ja'
 
 [[plugins]]
 repo = 'airblade/vim-gitgutter'
+
+[[plugins]]
+repo = 'arcticicestudio/nord-vim'
+hook_add = '''
+  let g:nord_uniform_status_lines = 0
+  syntax on
+  colorscheme nord
+'''
+
+[[plugins]]
+repo = 'junegunn/fzf'
+build = "./install --all"
+merged = 0
+
+[[plugins]]
+repo = 'junegunn/fzf.vim'
+depends = "fzf"

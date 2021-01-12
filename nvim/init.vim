@@ -1,27 +1,32 @@
-lang ja_JP.UTF-8
-set encoding=utf-8
-if &compatible
-  set nocompatible
-endif
+set fileencodings=utf-8,cp932,euc-jp,sjis
+set nocompatible
+set lazyredraw
 
 set tabstop=4
 set shiftwidth=4
 set expandtab
+
 set autoindent
 set autoread
 set cursorline
+set hidden
 set number
-set nobackup
-set nowritebackup
 set hlsearch
 set ruler
 set showcmd
-set showmatch
-set background=dark
 set termguicolors
 set updatetime=300
 set signcolumn=yes
-set clipboard+=unnamed
+set mouse=a
+set title
+
+" set yanked text to clipboard
+set clipboard&
+set clipboard^=unnamedplus
+
+set ambiwidth=double " force double-byte character width to 2
+set showmatch matchtime=2 " highlight corresponding parenthesis for 0.2 sec
+set pumheight=10 " set limit of completion window height
 
 if $NVIM_NO_PLUGIN != '1'
     let s:vimrc_dir = expand('<sfile>:p:h')
@@ -64,25 +69,23 @@ inoremap <Down>  <Nop>
 inoremap <Left>  <Nop>
 inoremap <Right> <Nop>
 
+" use Y to yank cursor from end of line
+nnoremap Y y$
+
 " use sh and sl to switch between buffers
 nnoremap <silent> sh :bp<CR>
 nnoremap <silent> sl :bn<CR>
 
 " use w{h,j,k,l} to switch between panels
-nnoremap wh <C-w>w
-nnoremap wj <C-w>j
-nnoremap wk <C-w>k
-nnoremap wl <C-w>l
+nnoremap <silent> wh <C-w>w
+nnoremap <silent> wj <C-w>j
+nnoremap <silent> wk <C-w>k
+nnoremap <silent> wl <C-w>l
 
 " use esc-esc for remove search highlight
 nnoremap <silent> <Esc><Esc> :nohlsearch<CR>
 
 filetype plugin indent on
-syntax on
-
-colorscheme xcodedarkhc
-hi Normal guibg=NONE ctermbg=NONE
-hi EndOfBuffer guibg=NONE ctermbg=NONE
 
 " https://mickey24.hatenablog.com/entry/20120808/vim_highlight_trailing_spaces
 hi link TrailingSpaces Error
@@ -93,41 +96,8 @@ au BufNewFile,BufRead *.tsx setf typescript.tsx
 au BufNewFile,BufRead *.kt setf kotlin
 au BufNewFile,BufRead *.toml setf toml
 
-" define SyntaxInfo command for adjusting syntax color.
-function! s:get_syn_id(transparent)
-  let synid = synID(line("."), col("."), 1)
-  if a:transparent
-    return synIDtrans(synid)
-  else
-    return synid
-  endif
-endfunction
-function! s:get_syn_attr(synid)
-  let name = synIDattr(a:synid, "name")
-  let ctermfg = synIDattr(a:synid, "fg", "cterm")
-  let ctermbg = synIDattr(a:synid, "bg", "cterm")
-  let guifg = synIDattr(a:synid, "fg", "gui")
-  let guibg = synIDattr(a:synid, "bg", "gui")
-  return {
-        \ "name": name,
-        \ "ctermfg": ctermfg,
-        \ "ctermbg": ctermbg,
-        \ "guifg": guifg,
-        \ "guibg": guibg}
-endfunction
-function! s:get_syn_info()
-  let baseSyn = s:get_syn_attr(s:get_syn_id(0))
-  echo "name: " . baseSyn.name .
-        \ " ctermfg: " . baseSyn.ctermfg .
-        \ " ctermbg: " . baseSyn.ctermbg .
-        \ " guifg: " . baseSyn.guifg .
-        \ " guibg: " . baseSyn.guibg
-  let linkedSyn = s:get_syn_attr(s:get_syn_id(1))
-  echo "link to"
-  echo "name: " . linkedSyn.name .
-        \ " ctermfg: " . linkedSyn.ctermfg .
-        \ " ctermbg: " . linkedSyn.ctermbg .
-        \ " guifg: " . linkedSyn.guifg .
-        \ " guibg: " . linkedSyn.guibg
-endfunction
-command! SyntaxInfo call s:get_syn_info()
+" if swapfile exists, open file as readonly
+augroup swapchoice-readonly
+  autocmd!
+  autocmd SwapExists * let v:swapchoice = 'o'
+augroup END
