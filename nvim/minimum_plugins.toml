@@ -13,6 +13,7 @@ repo = 'nvim-treesitter/nvim-treesitter'
 hook_add = '''
 lua <<EOF
   require'nvim-treesitter.configs'.setup {
+      ensure_installed = "all",
       highlight = {
         enable = true
       }
@@ -37,9 +38,9 @@ repo = 'vim-jp/vimdoc-ja'
 repo = 'airblade/vim-gitgutter'
 
 [[plugins]]
-repo = 'arcticicestudio/nord-vim'
+repo = 'kawaemon/nord-vim'
+branch = "feat/support-treesitter"
 hook_add = '''
-  let g:nord_uniform_status_lines = 0
   syntax on
   colorscheme nord
 '''
