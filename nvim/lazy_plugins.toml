@@ -3,42 +3,11 @@ repo = 'pangloss/vim-javascript'
 on_ft = ['javascript']
 
 [[plugins]]
-repo = 'josa42/coc-go'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['go']
-
-[[plugins]]
-repo = 'clangd/coc-clangd'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['c', 'cpp']
-
-[[plugins]]
-repo = 'voldikss/coc-cmake'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['cmake']
-
-[[plugins]]
-repo = 'fannheyward/coc-rust-analyzer'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['rust']
-
-[[plugins]]
 repo = 'rust-lang/rust.vim'
 on_ft = ['rust']
 hook_source = '''
   let g:rustfmt_autosave = 1
 '''
-
-[[plugins]]
-repo = 'neoclide/coc-json'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['json']
-
-
-[[plugins]]
-repo = 'neoclide/coc-tsserver'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
 
 [[plugins]]
 repo = 'peitalin/vim-jsx-typescript'
@@ -48,21 +17,6 @@ on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
 [[plugins]]
 repo = 'leafgarland/typescript-vim'
 on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
-
-[[plugins]]
-repo = 'neoclide/coc-prettier'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['typescript', 'javascript', 'typescript.jsx', 'typescript.tsx']
-
-[[plugins]]
-repo = 'neoclide/coc-css'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['css', 'scss', 'sass']
-
-[[plugins]]
-repo = 'neoclide/coc-html'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['html']
 
 [[plugins]]
 repo = 'cespare/vim-toml'
@@ -89,26 +43,11 @@ repo = 'andys8/vim-elm-syntax.git'
 on_ft = ['elm']
 
 [[plugins]]
-repo = 'neoclide/coc-python'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['python']
-
-[[plugins]]
 repo = 'vim-python/python-syntax'
 on_ft = ['python']
 hook_source = '''
   let g:python_highlight_all = 1
 '''
-
-[[plugins]]
-repo = 'neoclide/coc-yaml'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['yaml']
-
-[[plugins]]
-repo = 'scalameta/coc-metals'
-build = 'yarn install --frozen-lockfile'
-on_ft = ['scala']
 
 [[plugins]]
 repo = 'derekwyatt/vim-scala'

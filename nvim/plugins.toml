@@ -26,11 +26,6 @@ set updatetime=500 " threshold of CursorHold
 
 
 [[plugins]]
-repo = 'neoclide/coc-highlight'
-build = 'yarn install --frozen-lockfile'
-
-
-[[plugins]]
 repo = 'osyo-manga/vim-precious'
 depends = ['Shougo/context_filetype.vim']
 
