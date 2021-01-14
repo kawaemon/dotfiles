@@ -17,14 +17,12 @@ set showcmd
 set termguicolors
 set updatetime=300
 set signcolumn=yes
-set mouse=a
 set title
 
 " set yanked text to clipboard
 set clipboard&
 set clipboard^=unnamedplus
 
-set ambiwidth=double " force double-byte character width to 2
 set showmatch matchtime=2 " highlight corresponding parenthesis for 0.2 sec
 set pumheight=10 " set limit of completion window height
 
