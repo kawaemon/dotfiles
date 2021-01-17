@@ -14,7 +14,6 @@ set number
 set hlsearch
 set ruler
 set showcmd
-set termguicolors
 set updatetime=300
 set signcolumn=yes
 set title
