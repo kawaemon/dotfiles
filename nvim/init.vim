@@ -69,9 +69,10 @@ inoremap <Right> <Nop>
 " use Y to yank cursor from end of line
 nnoremap Y y$
 
-" use sh and sl to switch between buffers
+" buffer keymaps
 nnoremap <silent> sh :bp<CR>
 nnoremap <silent> sl :bn<CR>
+nnoremap <silent> sd :bdelete<CR>
 
 " use w{h,j,k,l} to switch between panels
 nnoremap <silent> wh <C-w>w
