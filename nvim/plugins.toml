@@ -16,12 +16,12 @@ inoremap <silent><expr> <TAB>
 inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
 
 " define coc command alias
-command! -nargs=0 Format :call CocAction('format') 
+command! -nargs=0 Format :call CocAction('format')
 command! -nargs=0 Import :call CocAction('runCommand', 'editor.action.organizeImport')
 command! -nargs=0 Definition :call CocAction('jumpDefinition')
+command! -nargs=0 Rename :call CocActionAsync('rename')
 autocmd CursorHold * silent call CocActionAsync('highlight')
 set updatetime=500 " threshold of CursorHold
-
 '''
 
 
