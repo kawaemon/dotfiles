@@ -15,6 +15,10 @@
     ch = checkout
     b = branch
 
+    # from https://qiita.com/Yinaura/items/30992f25b87f76af3ba2
+    current-branch-name = ! git branch | grep -e '^\\* ' | sed -e 's/^\\* //g'
+    force-pull = !git fetch && git reset --hard origin/$(git current-branch-name)
+
 [commit]
     gpgsign = true
 
