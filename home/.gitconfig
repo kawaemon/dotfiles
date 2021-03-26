@@ -33,5 +33,9 @@
     minus-color = "#340001"
     syntax-theme = Nord
 
+[ghq]
+    root = ~/repo
+
 [interactive]
     diffFilter = delta --color-only
+
