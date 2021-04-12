@@ -2,10 +2,6 @@
   "coc.preferences.formatOnSaveFiletypes": ["css", "markdown", "typescript"],
   "rust-analyzer.inlayHints.chainingHints": false,
   "languageserver": {
-    "kotlin": {
-      "command": "kotlin-language-server",
-      "filetypes": ["kotlin"]
-    },
     "elmLS": {
       "command": "elm-language-server",
       "filetypes": ["elm"],
