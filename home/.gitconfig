@@ -3,9 +3,9 @@
     pager = delta
 
 [user]
-    email = 34652535+kawaemon@users.noreply.github.com
+    email = me@kawaemon.dev
     name = kawaemon
-    signingKey = 7BB97A8CB456140E5DF3E9A1BD3245B1A7C7F65F
+    signingKey = 26964048E4EFF64184AF77F3E6489583F95924E1
 
 [alias]
     a = add
