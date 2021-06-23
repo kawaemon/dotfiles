@@ -1,25 +1,25 @@
-vim.o.fileencodings = "utf-8,cp932,sjis"
-vim.o.lazyredraw = true
+vim.opt.fileencodings = "utf-8,cp932,sjis"
+vim.opt.lazyredraw = true
 
-vim.bo.tabstop = 4
-vim.bo.shiftwidth = 4
-vim.bo.expandtab = true
+vim.opt.tabstop = 4
+vim.opt.shiftwidth = 4
+vim.opt.expandtab = true
 
-vim.bo.autoindent = true
-vim.o.autoread = true
-vim.wo.cursorline = true
-vim.o.hidden = true
-vim.wo.number = true
-vim.o.updatetime = 300
-vim.wo.signcolumn = "yes"
-vim.wo.wrap = false
-vim.o.title = true
+vim.opt.autoindent = true
+vim.opt.autoread = true
+vim.opt.cursorline = true
+vim.opt.hidden = true
+vim.opt.number = true
+vim.opt.updatetime = 300
+vim.opt.signcolumn = "yes"
+vim.opt.wrap = false
+vim.opt.title = true
 
-vim.o.clipboard = "unnamedplus"
-vim.o.showmatch = true
+vim.opt.clipboard = "unnamedplus"
+vim.opt.showmatch = true
 
-vim.o.matchtime = 2
-vim.o.pumheight = 20
+vim.opt.matchtime = 2
+vim.opt.pumheight = 20
 
 
 -- disable arrow keys.
