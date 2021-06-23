@@ -12,6 +12,7 @@ vim.o.hidden = true
 vim.wo.number = true
 vim.o.updatetime = 300
 vim.wo.signcolumn = "yes"
+vim.wo.wrap = false
 vim.o.title = true
 
 vim.o.clipboard = "unnamedplus"
