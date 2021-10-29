@@ -63,4 +63,3 @@ hook_add = """
 
 [[plugins]]
 repo = "wakatime/vim-wakatime"
-
