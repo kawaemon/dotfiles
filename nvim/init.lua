@@ -14,6 +14,7 @@ vim.opt.updatetime = 300
 vim.opt.signcolumn = "yes"
 vim.opt.wrap = false
 vim.opt.title = true
+vim.opt.termguicolors = true
 
 vim.opt.clipboard = "unnamedplus"
 vim.opt.showmatch = true

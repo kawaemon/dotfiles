@@ -2,10 +2,21 @@
 repo = 'Shougo/dein.vim'
 
 [[plugins]]
-repo = 'vim-airline/vim-airline'
+repo = 'kyazdani42/nvim-web-devicons'
 hook_add = '''
-  let g:airline#extensions#tabline#enabled = 1
-  let g:airline_powerline_fonts = 1
+lua require("nvim-web-devicons").setup()
+'''
+
+[[plugins]]
+repo = 'kdheepak/tabline.nvim'
+hook_add = '''
+lua require("tabline").setup({ enable = true })
+'''
+
+[[plugins]]
+repo = 'nvim-lualine/lualine.nvim'
+hook_add = '''
+lua require('lualine').setup({ theme = "nord" })
 '''
 
 [[plugins]]
@@ -13,17 +24,19 @@ repo = 'nvim-treesitter/nvim-treesitter'
 hook_post_update = 'TSUpdate'
 hook_add = '''
 lua <<EOF
-  require'nvim-treesitter.configs'.setup {
-      ensure_installed = "maintained",
-      highlight = {
-        enable = true
-      }
-    }
+require('nvim-treesitter.configs').setup({
+    ensure_installed = "maintained",
+    highlight = { enable = true },
+    indent = { enable = true }
+})
 EOF
 '''
 
 [[plugins]]
-repo = 'preservim/nerdtree'
+repo = 'kyazdani42/nvim-tree.lua'
+hook_add = '''
+lua require("nvim-tree").setup()
+'''
 
 [[plugins]]
 repo = 'airblade/vim-gitgutter'
