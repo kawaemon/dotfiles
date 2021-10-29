@@ -22,9 +22,9 @@ vim.opt.matchtime = 2
 vim.opt.pumheight = 20
 
 
--- disable arrow keys.
-local allowKeys = {"<Up>", "<Down>", "<Left>", "<Right>"}
-for i, v in ipairs(allowKeys) do
+-- disable arrow keys and help key.
+local disallowedKeys = {"<Up>", "<Down>", "<Left>", "<Right>", "<F1>"}
+for i, v in ipairs(disallowedKeys) do
     vim.api.nvim_set_keymap("n", v, "<Nop>", { noremap = true })
     vim.api.nvim_set_keymap("i", v, "<Nop>", { noremap = true })
 end
