@@ -1,50 +1,50 @@
 [[plugins]]
-repo = 'pangloss/vim-javascript'
-on_ft = ['javascript']
+repo = "pangloss/vim-javascript"
+on_ft = ["javascript"]
 
 [[plugins]]
-repo = 'rust-lang/rust.vim'
-on_ft = ['rust']
-hook_source = '''
+repo = "rust-lang/rust.vim"
+on_ft = ["rust"]
+hook_source = """
   let g:rustfmt_autosave = 1
-'''
+"""
 
 [[plugins]]
-repo = 'peitalin/vim-jsx-typescript'
-depends = ['leafgarland/typescript-vim']
-on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
+repo = "peitalin/vim-jsx-typescript"
+depends = ["leafgarland/typescript-vim"]
+on_ft = ["typescript", "typescript.tsx", "typescript.jsx"]
 
 [[plugins]]
-repo = 'cespare/vim-toml'
-on_ft = ['toml']
+repo = "cespare/vim-toml"
+on_ft = ["toml"]
 
 [[plugins]]
-repo = 'udalov/kotlin-vim'
-on_ft = ['kotlin']
+repo = "udalov/kotlin-vim"
+on_ft = ["kotlin"]
 
 [[plugins]]
-repo = 'plasticboy/vim-markdown'
-on_ft = ['markdown']
+repo = "plasticboy/vim-markdown"
+on_ft = ["markdown"]
 
 [[plugins]]
-repo = 'previm/previm'
-on_ft = ['markdown']
-hook_source = '''
-  let g:previm_open_cmd = 'chromium'
+repo = "previm/previm"
+on_ft = ["markdown"]
+hook_source = """
+  let g:previm_open_cmd = "chromium"
   let g:vim_markdown_folding_disabled = 1
-'''
+"""
 
 [[plugins]]
-repo = 'andys8/vim-elm-syntax.git'
-on_ft = ['elm']
+repo = "andys8/vim-elm-syntax.git"
+on_ft = ["elm"]
 
 [[plugins]]
-repo = 'vim-python/python-syntax'
-on_ft = ['python']
-hook_source = '''
+repo = "vim-python/python-syntax"
+on_ft = ["python"]
+hook_source = """
   let g:python_highlight_all = 1
-'''
+"""
 
 [[plugins]]
-repo = 'derekwyatt/vim-scala'
-on_ft = ['scala']
+repo = "derekwyatt/vim-scala"
+on_ft = ["scala"]

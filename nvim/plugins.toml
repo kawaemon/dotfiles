@@ -1,18 +1,18 @@
 [[plugins]]
-repo = 'hrsh7th/cmp-buffer'
+repo = "hrsh7th/cmp-buffer"
 
 [[plugins]]
-repo = 'hrsh7th/cmp-path'
+repo = "hrsh7th/cmp-path"
 
 [[plugins]]
-repo = 'hrsh7th/nvim-cmp'
-depends = ['hrsh7th/cmp-buffer', 'hrsh7th/cmp-path']
-hook_add = '''
+repo = "hrsh7th/nvim-cmp"
+depends = ["hrsh7th/cmp-buffer", "hrsh7th/cmp-path"]
+hook_add = """
 set completeopt=menu,menuone,noselect
 
 lua <<EOF
 
-local cmp = require('cmp')
+local cmp = require("cmp")
 
 cmp.setup({
     sources = cmp.config.sources({}, {
@@ -20,22 +20,22 @@ cmp.setup({
     }),
 
     mapping = {
-        ['<Tab>'] = cmp.mapping(cmp.mapping.select_next_item(), { 'i', 's' }),
-        ['<S-Tab>'] = cmp.mapping(cmp.mapping.select_prev_item(), { 'i', 's' })
+        ["<Tab>"] = cmp.mapping(cmp.mapping.select_next_item(), { "i", "s" }),
+        ["<S-Tab>"] = cmp.mapping(cmp.mapping.select_prev_item(), { "i", "s" })
     }
 })
 
-cmp.setup.cmdline('/', { sources = { { name = 'buffer' } } })
-cmp.setup.cmdline(':', { sources = { { name = "path" } } })
+cmp.setup.cmdline("/", { sources = { { name = "buffer" } } })
+cmp.setup.cmdline(":", { sources = { { name = "path" } } })
 
 EOF
-'''
+"""
 
 [[plugins]]
-repo = 'osyo-manga/vim-precious'
-depends = ['Shougo/context_filetype.vim']
+repo = "osyo-manga/vim-precious"
+depends = ["Shougo/context_filetype.vim"]
 
 
 [[plugins]]
-repo = 'Shougo/context_filetype.vim'
+repo = "Shougo/context_filetype.vim"
 
