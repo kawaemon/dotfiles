@@ -1,27 +1,48 @@
+# [[plugins]]
+# repo = 'neoclide/coc.nvim'
+# merged = 0
+# rev = 'release'
+# hook_add = '''
+# " use tab key for completation
+# function! s:check_back_space() abort
+#   let col = col('.') - 1
+#   return !col || getline('.')[col - 1]  =~# '\s'
+# endfunction
+# 
+# inoremap <silent><expr> <TAB>
+#       \ pumvisible() ? "\<C-n>" :
+#       \ <SID>check_back_space() ? "\<TAB>" :
+#       \ coc#refresh()
+# inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
+# 
+# " define coc command alias
+# command! -nargs=0 Format :call CocAction('format')
+# command! -nargs=0 Import :call CocAction('runCommand', 'editor.action.organizeImport')
+# command! -nargs=0 Definition :call CocAction('jumpDefinition')
+# command! -nargs=0 Rename :call CocActionAsync('rename')
+# autocmd CursorHold * silent call CocActionAsync('highlight')
+# set updatetime=500 " threshold of CursorHold
+# '''
+
 [[plugins]]
-repo = 'neoclide/coc.nvim'
-merged = 0
-rev = 'release'
+repo = 'hrsh7th/cmp-buffer'
+
+[[plugins]]
+repo = 'hrsh7th/nvim-cmp'
+depends = ['hrsh7th/cmp-buffer']
 hook_add = '''
-" use tab key for completation
-function! s:check_back_space() abort
-  let col = col('.') - 1
-  return !col || getline('.')[col - 1]  =~# '\s'
-endfunction
+set completeopt=menu,menuone,noselect
 
-inoremap <silent><expr> <TAB>
-      \ pumvisible() ? "\<C-n>" :
-      \ <SID>check_back_space() ? "\<TAB>" :
-      \ coc#refresh()
-inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
-
-" define coc command alias
-command! -nargs=0 Format :call CocAction('format')
-command! -nargs=0 Import :call CocAction('runCommand', 'editor.action.organizeImport')
-command! -nargs=0 Definition :call CocAction('jumpDefinition')
-command! -nargs=0 Rename :call CocActionAsync('rename')
-autocmd CursorHold * silent call CocActionAsync('highlight')
-set updatetime=500 " threshold of CursorHold
+lua <<EOF
+local cmp = require('cmp')
+cmp.setup({
+    sources = cmp.config.sources({}, { { name = "buffer" } }),
+    mapping = {
+        ['<Tab>'] = cmp.mapping(cmp.mapping.select_next_item(), { 'i', 's' }),
+        ['<S-Tab>'] = cmp.mapping(cmp.mapping.select_prev_item(), { 'i', 's' })
+    }
+})
+EOF
 '''
 
 

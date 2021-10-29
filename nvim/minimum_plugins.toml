@@ -10,10 +10,11 @@ hook_add = '''
 
 [[plugins]]
 repo = 'nvim-treesitter/nvim-treesitter'
+hook_post_update = 'TSUpdate'
 hook_add = '''
 lua <<EOF
   require'nvim-treesitter.configs'.setup {
-      ensure_installed = "all",
+      ensure_installed = "maintained",
       highlight = {
         enable = true
       }
@@ -23,16 +24,6 @@ EOF
 
 [[plugins]]
 repo = 'preservim/nerdtree'
-
-[[plugins]]
-repo = 'easymotion/vim-easymotion'
-hook_add = '''
-  let g:EasyMotion_do_mapping = 0
-  nmap ss <Plug>(easymotion-s2)
-'''
-
-[[plugins]]
-repo = 'vim-jp/vimdoc-ja'
 
 [[plugins]]
 repo = 'airblade/vim-gitgutter'
@@ -59,3 +50,4 @@ hook_add = '''
 
 [[plugins]]
 repo = 'wakatime/vim-wakatime'
+

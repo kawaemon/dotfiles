@@ -15,10 +15,6 @@ depends = ['leafgarland/typescript-vim']
 on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
 
 [[plugins]]
-repo = 'leafgarland/typescript-vim'
-on_ft = ['typescript', 'typescript.tsx', 'typescript.jsx']
-
-[[plugins]]
 repo = 'cespare/vim-toml'
 on_ft = ['toml']
 
