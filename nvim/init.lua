@@ -22,31 +22,31 @@ vim.opt.showmatch = true
 vim.opt.matchtime = 2
 vim.opt.pumheight = 20
 
+local mapopt = { noremap = true, silent = true }
 
 -- disable arrow keys and help key.
 local disallowedKeys = {"<Up>", "<Down>", "<Left>", "<Right>", "<F1>"}
 for i, v in ipairs(disallowedKeys) do
-    vim.api.nvim_set_keymap("n", v, "<Nop>", { noremap = true })
-    vim.api.nvim_set_keymap("i", v, "<Nop>", { noremap = true })
+    vim.api.nvim_set_keymap("n", v, "<Nop>", mapopt)
+    vim.api.nvim_set_keymap("i", v, "<Nop>", mapopt)
 end
 
 -- use Y to yank cursor from end of line
-vim.api.nvim_set_keymap("n", "Y", "y$", { noremap = true })
+vim.api.nvim_set_keymap("n", "Y", "y$", mapopt)
 
 -- buffer keymaps
-vim.api.nvim_set_keymap("n", "sh", ":bp<CR>", { noremap = true, silent = true })
-vim.api.nvim_set_keymap("n", "sl", ":bn<CR>", { noremap = true, silent = true })
-vim.api.nvim_set_keymap("n", "sd", ":bdelete<CR>", { noremap = true, silent = true })
+vim.api.nvim_set_keymap("n", "sh", ":bp<CR>", mapopt)
+vim.api.nvim_set_keymap("n", "sl", ":bn<CR>", mapopt)
+vim.api.nvim_set_keymap("n", "sd", ":bdelete<CR>", mapopt)
 
 -- use w{h,j,k,l} to switch between panels
-vim.api.nvim_set_keymap("n", "wh", "<C-w>w", { noremap = true, silent = true })
-vim.api.nvim_set_keymap("n", "wj", "<C-w>j", { noremap = true, silent = true })
-vim.api.nvim_set_keymap("n", "wk", "<C-w>k", { noremap = true, silent = true })
-vim.api.nvim_set_keymap("n", "wl", "<C-w>l", { noremap = true, silent = true })
+vim.api.nvim_set_keymap("n", "wh", "<C-w>w", mapopt)
+vim.api.nvim_set_keymap("n", "wj", "<C-w>j", mapopt)
+vim.api.nvim_set_keymap("n", "wk", "<C-w>k", mapopt)
+vim.api.nvim_set_keymap("n", "wl", "<C-w>l", mapopt)
 
 -- use esc-esc for remove search highlight
 vim.api.nvim_set_keymap("n", "<Esc><Esc>", ":nohlsearch<CR>", { noremap = true, silent = true })
-
 
 local vimrcDir = vim.env.HOME .. "/.config/nvim"
 local deinDir = vimrcDir .. "/dein"
@@ -76,3 +76,8 @@ end
 if vim.fn["dein#check_install"]() ~= 0 then
     vim.fn["dein#install"]()
 end
+
+vim.cmd([[
+    hi link TrailingSpaces Error
+    match TrailingSpaces /\s\+$/
+]])

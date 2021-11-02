@@ -45,7 +45,6 @@ repo = "airblade/vim-gitgutter"
 repo = "kawaemon/nord-vim"
 branch = "feat/support-treesitter"
 hook_add = """
-  syntax on
   colorscheme nord
 """
 

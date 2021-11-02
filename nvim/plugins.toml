@@ -1,32 +1,36 @@
 [[plugins]]
+repo = "neovim/nvim-lspconfig"
+
+[[plugins]]
 repo = "hrsh7th/cmp-buffer"
 
 [[plugins]]
 repo = "hrsh7th/cmp-path"
 
 [[plugins]]
+repo = "hrsh7th/cmp-nvim-lsp"
+
+[[plugins]]
+repo = "L3MON4D3/LuaSnip"
+
+[[plugins]]
+repo = "saadparwaiz1/cmp_luasnip"
+depends = ["L3MON4D3/LuaSnip"]
+
+[[plugins]]
+repo = "folke/lsp-colors.nvim"
+
+[[plugins]]
 repo = "hrsh7th/nvim-cmp"
-depends = ["hrsh7th/cmp-buffer", "hrsh7th/cmp-path"]
+depends = [
+    "neovim/nvim-lspconfig",
+    "hrsh7th/cmp-buffer",
+    "hrsh7th/cmp-path",
+    "hrsh7th/cmp-nvim-lsp",
+    "saadparwaiz1/cmp_luasnip",
+    "L3MON4D3/LuaSnip"
+]
 hook_add = """
 set completeopt=menu,menuone,noselect
-
-lua <<EOF
-
-local cmp = require("cmp")
-
-cmp.setup({
-    sources = cmp.config.sources({}, {
-        { name = "buffer" },
-    }),
-
-    mapping = {
-        ["<Tab>"] = cmp.mapping(cmp.mapping.select_next_item(), { "i", "s" }),
-        ["<S-Tab>"] = cmp.mapping(cmp.mapping.select_prev_item(), { "i", "s" })
-    }
-})
-
-cmp.setup.cmdline("/", { sources = { { name = "buffer" } } })
-cmp.setup.cmdline(":", { sources = { { name = "path" } } })
-
-EOF
+lua require("on_nvim_cmp_load").setup()
 """
