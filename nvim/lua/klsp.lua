@@ -5,29 +5,32 @@ M.setup = function()
         virtual_text = {
             prefix = "",
             spacing = 0,
-            format = function(diag)
+            format = function(diagnostic)
                 local severity = ""
 
-                if diag.severity == vim.diagnostic.severity.ERROR then
+                if diagnostic.severity == vim.diagnostic.severity.ERROR then
                     severity = "E"
-                elseif diag.severity == vim.diagnostic.severity.WARN then
+                elseif diagnostic.severity == vim.diagnostic.severity.WARN then
                     severity = "W"
-                elseif diag.severity == vim.diagnostic.severity.INFO then
+                elseif diagnostic.severity == vim.diagnostic.severity.INFO then
                     severity = "I"
-                elseif diag.severity == vim.diagnostic.severity.HINT then
+                elseif diagnostic.severity == vim.diagnostic.severity.HINT then
                     severity = "H"
                 end
 
-                return string.format("%s: %s", severity, diag.message)
+                return string.format("%s: %s", severity, diagnostic.message)
             end
         }
     })
 
     local cmp = require("cmp")
+    local luasnip = require("luasnip")
+    local lspconfig = require("lspconfig")
+    local cmp_nvim_lsp = require("cmp_nvim_lsp")
 
     cmp.setup({
         snippet = {
-            expand = function(a) require("luasnip").lsp_expand(a.body) end
+            expand = function(s) luasnip.lsp_expand(s.body) end
         },
 
         sources = cmp.config.sources({
@@ -49,11 +52,14 @@ M.setup = function()
     cmp.setup.cmdline(":", { sources = { { name = "path" } } })
 
     local capabilities = vim.lsp.protocol.make_client_capabilities()
-    capabilities = require("cmp_nvim_lsp").update_capabilities(capabilities)
+    capabilities = cmp_nvim_lsp.update_capabilities(capabilities)
 
-    local lspconfig = require("lspconfig")
     lspconfig.rust_analyzer.setup({
         cmd = { "rustup", "run", "nightly", "rust-analyzer" },
+        capabilities = capabilities,
+        on_attatch = function()
+            print("rust-analyzer is attached")
+        end,
         settings = {
             ["rust-analyzer"] = {
                 procMacro = { enable = true },
@@ -65,12 +71,23 @@ M.setup = function()
     lspconfig.gopls.setup({
         cmd = { "gopls", "serve", "--debug=localhost:6060" },
         capabilities = capabilities,
+        on_attatch = function()
+            print("gopls is attached. Debugging is available at localhost:6060")
+        end,
         settings = {
             gopls = {
                 staticcheck = true,
             }
         }
     })
+
+    vim.cmd([[
+        command! -nargs=0 Hover :lua vim.lsp.buf.hover()
+        command! -nargs=0 CodeAction :lua vim.lsp.buf.code_action()
+        command! -nargs=0 Definition :lua vim.lsp.buf.definition()
+        command! -nargs=0 Implementation :lua vim.lsp.buf.implementation()
+        autocmd BufWritePre * :lua vim.lsp.buf.formatting_sync()
+    ]])
 end
 
 return M

@@ -3,21 +3,15 @@ repo = "Shougo/dein.vim"
 
 [[plugins]]
 repo = "kyazdani42/nvim-web-devicons"
-hook_add = """
-lua require("nvim-web-devicons").setup()
-"""
+hook_add = "lua require('nvim-web-devicons').setup()"
 
 [[plugins]]
 repo = "kdheepak/tabline.nvim"
-hook_add = """
-lua require("tabline").setup({ enable = true })
-"""
+hook_add = "lua require('tabline').setup({ enable = true })"
 
 [[plugins]]
 repo = "nvim-lualine/lualine.nvim"
-hook_add = """
-lua require("lualine").setup({ theme = "nord" })
-"""
+hook_add = "lua require('lualine').setup({ theme = 'nord' })"
 
 [[plugins]]
 repo = "nvim-treesitter/nvim-treesitter"
@@ -36,6 +30,7 @@ EOF
 repo = "kyazdani42/nvim-tree.lua"
 hook_add = """
 lua require("nvim-tree").setup()
+command! -nargs=0 Tree :NvimTreeToggle
 """
 
 [[plugins]]
@@ -44,9 +39,7 @@ repo = "airblade/vim-gitgutter"
 [[plugins]]
 repo = "kawaemon/nord-vim"
 branch = "feat/support-treesitter"
-hook_add = """
-  colorscheme nord
-"""
+hook_add = "colorscheme nord"
 
 [[plugins]]
 repo = "junegunn/fzf"
@@ -56,9 +49,7 @@ merged = 0
 [[plugins]]
 repo = "junegunn/fzf.vim"
 depends = "fzf"
-hook_add = """
-  command! -nargs=0 F :Files
-"""
+hook_add = "command! -nargs=0 F :Files"
 
 [[plugins]]
 repo = "wakatime/vim-wakatime"

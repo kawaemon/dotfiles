@@ -32,5 +32,5 @@ depends = [
 ]
 hook_add = """
 set completeopt=menu,menuone,noselect
-lua require("on_nvim_cmp_load").setup()
+command! -nargs=0 Lsp :lua require("klsp").setup()
 """
