@@ -1,6 +1,7 @@
 local M = {}
 
 M.setup = function()
+    vim.cmd("set completeopt=menu,menuone,noselect")
     vim.diagnostic.config({
         virtual_text = {
             prefix = "",
@@ -49,10 +50,17 @@ M.setup = function()
     })
 
     cmp.setup.cmdline("/", { sources = { { name = "buffer" } } })
-    cmp.setup.cmdline(":", { sources = { { name = "path" } } })
+    cmp.setup.cmdline(":", { sources = { { name = "cmdline" }, { name = "path" } } })
 
     local capabilities = vim.lsp.protocol.make_client_capabilities()
     capabilities = cmp_nvim_lsp.update_capabilities(capabilities)
+
+    lspconfig.clangd.setup({
+        capabilities = capabilities,
+        on_attatch = function()
+            print("clangd is attached")
+        end,
+    })
 
     lspconfig.rust_analyzer.setup({
         cmd = { "rustup", "run", "nightly", "rust-analyzer" },
@@ -86,6 +94,8 @@ M.setup = function()
         command! -nargs=0 CodeAction :lua vim.lsp.buf.code_action()
         command! -nargs=0 Definition :lua vim.lsp.buf.definition()
         command! -nargs=0 Implementation :lua vim.lsp.buf.implementation()
+        command! -nargs=0 Rename :lua vim.lsp.buf.rename()
+        command! -nargs=0 References :lua vim.lsp.buf.references()
         autocmd BufWritePre * :lua vim.lsp.buf.formatting_sync()
     ]])
 end

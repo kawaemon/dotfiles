@@ -1,5 +1,6 @@
 [[plugins]]
 repo = "Shougo/dein.vim"
+hook_add = "command! -nargs=0 DeinRecache :call dein#recache_runtimepath()"
 
 [[plugins]]
 repo = "kyazdani42/nvim-web-devicons"
@@ -40,6 +41,10 @@ repo = "airblade/vim-gitgutter"
 repo = "kawaemon/nord-vim"
 branch = "feat/support-treesitter"
 hook_add = "colorscheme nord"
+
+[[plugins]]
+repo = "ishan9299/nvim-solarized-lua"
+# hook_add = "colorscheme solarized-flat"
 
 [[plugins]]
 repo = "junegunn/fzf"

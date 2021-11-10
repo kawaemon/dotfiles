@@ -18,7 +18,7 @@ repo = "saadparwaiz1/cmp_luasnip"
 depends = ["L3MON4D3/LuaSnip"]
 
 [[plugins]]
-repo = "folke/lsp-colors.nvim"
+repo = "hrsh7th/cmp-cmdline"
 
 [[plugins]]
 repo = "hrsh7th/nvim-cmp"
@@ -28,9 +28,9 @@ depends = [
     "hrsh7th/cmp-path",
     "hrsh7th/cmp-nvim-lsp",
     "saadparwaiz1/cmp_luasnip",
-    "L3MON4D3/LuaSnip"
+    "L3MON4D3/LuaSnip",
+    "hrsh7th/cmp-cmdline",
 ]
 hook_add = """
-set completeopt=menu,menuone,noselect
 command! -nargs=0 Lsp :lua require("klsp").setup()
 """

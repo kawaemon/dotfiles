@@ -24,14 +24,19 @@ vim.opt.pumheight = 20
 
 local mapopt = { noremap = true, silent = true }
 
--- disable arrow keys and help key.
-local disallowedKeys = {"<Up>", "<Down>", "<Left>", "<Right>", "<F1>"}
+-- disable arrow keys, help key, macro key, ex-mode key.
+local disallowedKeys = { "<Up>", "<Down>", "<Left>", "<Right>", "<F1>" }
 for i, v in ipairs(disallowedKeys) do
     vim.api.nvim_set_keymap("n", v, "<Nop>", mapopt)
     vim.api.nvim_set_keymap("i", v, "<Nop>", mapopt)
 end
 
--- use Y to yank cursor from end of line
+disallowedKeys = { "q", "Q" }
+for i, v in ipairs(disallowedKeys) do
+    vim.api.nvim_set_keymap("n", v, "<Nop>", mapopt)
+end
+
+-- use Y to yank from cursor to end of line
 vim.api.nvim_set_keymap("n", "Y", "y$", mapopt)
 
 -- buffer keymaps
@@ -45,7 +50,7 @@ vim.api.nvim_set_keymap("n", "wj", "<C-w>j", mapopt)
 vim.api.nvim_set_keymap("n", "wk", "<C-w>k", mapopt)
 vim.api.nvim_set_keymap("n", "wl", "<C-w>l", mapopt)
 
--- use esc-esc for remove search highlight
+-- use esc-esc to remove search highlight
 vim.api.nvim_set_keymap("n", "<Esc><Esc>", ":nohlsearch<CR>", { noremap = true, silent = true })
 
 local vimrcDir = vim.env.HOME .. "/.config/nvim"
@@ -80,4 +85,7 @@ end
 vim.cmd([[
     hi link TrailingSpaces Error
     match TrailingSpaces /\s\+$/
+    command! -nargs=0 W :w
+    command! -nargs=0 Wq :wq
+    au FocusLost * silent! wa
 ]])
