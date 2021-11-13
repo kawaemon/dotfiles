@@ -37,14 +37,14 @@ command! -nargs=0 Tree :NvimTreeToggle
 [[plugins]]
 repo = "airblade/vim-gitgutter"
 
-[[plugins]]
-repo = "kawaemon/nord-vim"
-branch = "feat/support-treesitter"
-hook_add = "colorscheme nord"
+# [[plugins]]
+# repo = "kawaemon/nord-vim"
+# branch = "feat/support-treesitter"
+# hook_add = "colorscheme nord"
 
 [[plugins]]
 repo = "ishan9299/nvim-solarized-lua"
-# hook_add = "colorscheme solarized-flat"
+hook_add = "colorscheme solarized-flat"
 
 [[plugins]]
 repo = "junegunn/fzf"
