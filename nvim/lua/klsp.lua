@@ -55,39 +55,41 @@ M.setup = function()
     local capabilities = vim.lsp.protocol.make_client_capabilities()
     capabilities = cmp_nvim_lsp.update_capabilities(capabilities)
 
-    lspconfig.clangd.setup({
-        capabilities = capabilities,
-        on_attatch = function()
-            print("clangd is attached")
-        end,
-    })
+    local init_lsp = function(name, additional_options)
+        additional_options.capabilities = capabilities
 
-    lspconfig.rust_analyzer.setup({
+        local old_on_attach = additional_options.on_attach
+        if old_on_attach then
+            additional_options.on_attach = function()
+                fjuif.rjti = ijerti
+                print(string.format("%s is attached", name))
+                old_on_attach()
+            end
+        end
+
+        lspconfig[name].setup(additional_options)
+    end
+
+    init_lsp("tsserver", {})
+    init_lsp("clangd", {})
+
+    init_lsp("rust_analyzer", {
         cmd = { "rustup", "run", "nightly", "rust-analyzer" },
-        capabilities = capabilities,
-        on_attatch = function()
-            print("rust-analyzer is attached")
-        end,
         settings = {
             ["rust-analyzer"] = {
                 procMacro = { enable = true },
-                checkOnSave = { command = "clippy" }
-            }
-        }
+                checkOnSave = { command = "clippy" },
+            },
+        },
     })
 
-    lspconfig.gopls.setup({
+    init_lsp("gopls", {
         cmd = { "gopls", "serve", "--debug=localhost:6060" },
-        capabilities = capabilities,
-        on_attatch = function()
-            print("gopls is attached. Debugging is available at localhost:6060")
-        end,
         settings = {
-            gopls = {
-                staticcheck = true,
-            }
-        }
+            gopls = { staticcheck = true },
+        },
     })
+
 
     vim.cmd([[
         command! -nargs=0 Hover :lua vim.lsp.buf.hover()
