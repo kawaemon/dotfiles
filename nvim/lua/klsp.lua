@@ -39,6 +39,7 @@ M.setup = function()
             { name = "luasnip" }
         }, {
             { name = "buffer" },
+            { name = "path" },
         }),
 
         mapping = {
