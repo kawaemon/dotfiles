@@ -15,14 +15,19 @@ repo = "nvim-lualine/lualine.nvim"
 hook_add = "lua require('lualine').setup({ theme = 'nord' })"
 
 [[plugins]]
+repo = "windwp/nvim-ts-autotag"
+
+[[plugins]]
 repo = "nvim-treesitter/nvim-treesitter"
+depends = ["windwp/nvim-ts-autotag"]
 hook_post_update = "TSUpdate"
 hook_add = """
 lua <<EOF
 require("nvim-treesitter.configs").setup({
     ensure_installed = "maintained",
     highlight = { enable = true },
-    indent = { enable = true }
+    indent = { enable = true },
+    autotag = { enable = true },
 })
 EOF
 """
