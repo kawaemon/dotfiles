@@ -7,6 +7,9 @@ font:
 
     size: 15
 
+mouse:
+    hide_when_typing: true
+
 # Colors (Solarized Dark)
 colors:
   # Default colors
