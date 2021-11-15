@@ -1,7 +1,16 @@
 #!/bin/bash
 
-ln -s $PWD/nvim $HOME/.config/nvim
-ln -s $PWD/home/.gitconfig $HOME/.gitconfig
-ln -s $PWD/home/.gitignore_global $HOME/.gitignore_global
-ln -s $PWD/home/.tmux.conf $HOME/.tmux.conf
-ln -s $PWD/alacritty/alacritty.yml $HOME/.config/alacritty/alacritty.yml
+read -p "Are you sure? This operation overwrites existing files. [y/N]" -n 1 -r
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    exit 1
+fi
+
+echo
+
+ln -sfvn $PWD/nvim $HOME/.config/nvim
+ln -sfv $PWD/gitconfig $HOME/.gitconfig
+ln -sfv $PWD/global_gitignore $HOME/.global_gitignore
+ln -sfv $PWD/tmux.conf $HOME/.tmux.conf
+
+mkdir -p $HOME/.config/alacritty/
+ln -sfv $PWD/alacritty/alacritty.yml $HOME/.config/alacritty/alacritty.yml

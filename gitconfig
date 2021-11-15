@@ -1,5 +1,6 @@
+# vim: ft=gitconfig
 [core]
-    excludesfile = ~/.gitignore_global
+    excludesfile = ~/.global_gitignore
     pager = delta
 
 [user]
@@ -33,9 +34,8 @@
     minus-color = "#340001"
     syntax-theme = Nord
 
-[ghq]
-    root = ~/repo
-
 [interactive]
     diffFilter = delta --color-only
 
+[ghq]
+    root = ~/repo
