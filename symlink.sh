@@ -14,3 +14,6 @@ ln -sfv $PWD/tmux.conf $HOME/.tmux.conf
 
 mkdir -p $HOME/.config/alacritty/
 ln -sfv $PWD/alacritty/alacritty.yml $HOME/.config/alacritty/alacritty.yml
+
+mkdir -p $HOME/.config/lazygit/
+ln -sfv $PWD/lazygit.yml $HOME/.config/lazygit/config.yml
