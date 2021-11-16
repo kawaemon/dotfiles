@@ -18,6 +18,10 @@ hook_add = "lua require('lualine').setup({ theme = 'nord' })"
 repo = "windwp/nvim-ts-autotag"
 
 [[plugins]]
+repo = "easymotion/vim-easymotion"
+hook_add = "nmap ss <Plug>(easymotion-s2)"
+
+[[plugins]]
 repo = "nvim-treesitter/nvim-treesitter"
 depends = ["windwp/nvim-ts-autotag"]
 hook_post_update = "TSUpdate"
