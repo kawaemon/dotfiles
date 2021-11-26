@@ -16,6 +16,7 @@ vim.opt.title = true
 vim.opt.termguicolors = true
 
 vim.opt.clipboard = "unnamedplus"
+vim.opt.matchpairs:append({ "<:>" })
 vim.opt.showmatch = true
 
 vim.opt.matchtime = 2
