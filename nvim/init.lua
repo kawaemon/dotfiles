@@ -18,6 +18,8 @@ vim.opt.termguicolors = true
 vim.opt.clipboard = "unnamedplus"
 vim.opt.matchpairs:append({ "<:>" })
 vim.opt.showmatch = true
+vim.opt.ignorecase = true
+vim.opt.smartcase = true
 
 vim.opt.matchtime = 2
 vim.opt.pumheight = 20
