@@ -14,7 +14,7 @@ ln -sfv $PWD/tmux.conf $HOME/.tmux.conf
 ln -sfv $PWD/zshrc $HOME/.zshrc.shared
 
 mkdir -p $HOME/.config/alacritty/
-ln -sfv $PWD/alacritty/alacritty.yml $HOME/.config/alacritty/alacritty.yml
+ln -sfv $PWD/alacritty.yml $HOME/.config/alacritty/alacritty.yml
 ln -sfv $PWD/starship.toml $HOME/.config/starship.toml
 
 mkdir -p $HOME/.config/lazygit/
