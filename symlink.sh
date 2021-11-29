@@ -15,6 +15,7 @@ ln -sfv $PWD/zshrc $HOME/.zshrc.shared
 
 mkdir -p $HOME/.config/alacritty/
 ln -sfv $PWD/alacritty/alacritty.yml $HOME/.config/alacritty/alacritty.yml
+ln -sfv $PWD/starship.toml $HOME/.config/starship.toml
 
 mkdir -p $HOME/.config/lazygit/
 ln -sfv $PWD/lazygit.yml $HOME/.config/lazygit/config.yml

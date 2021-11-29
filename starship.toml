@@ -1,0 +1,4 @@
+command_timeout = 50
+
+[gcloud]
+disabled = true
