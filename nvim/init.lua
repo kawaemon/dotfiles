@@ -45,7 +45,7 @@ vim.api.nvim_set_keymap("n", "Y", "y$", mapopt)
 -- buffer keymaps
 vim.api.nvim_set_keymap("n", "sh", ":bp<CR>", mapopt)
 vim.api.nvim_set_keymap("n", "sl", ":bn<CR>", mapopt)
-vim.api.nvim_set_keymap("n", "sd", ":b#|bd#<CR>", mapopt)
+vim.api.nvim_set_keymap("n", "sd", ":b#|bw#<CR>", mapopt)
 
 -- use w{h,j,k,l} to switch between panels
 vim.api.nvim_set_keymap("n", "wh", "<C-w>w", mapopt)
