@@ -8,6 +8,7 @@ alias cat=bat
 alias sl=ls
 alias v=nvim
 alias lg=lazygit
+alias vimdiff="nvim -d"
 alias cz="nvm exec default cz"
 alias repo='__D=`ghq list | fzf` && cd "$HOME/repo/$__D"'
 alias f='__D=`fzf` && cd $__D'
