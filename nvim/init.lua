@@ -20,6 +20,7 @@ vim.opt.matchpairs:append({ "<:>" })
 vim.opt.showmatch = true
 vim.opt.ignorecase = true
 vim.opt.smartcase = true
+vim.opt.mouse = "a"
 
 vim.opt.matchtime = 2
 vim.opt.pumheight = 20
