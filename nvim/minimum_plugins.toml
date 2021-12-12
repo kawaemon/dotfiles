@@ -22,8 +22,11 @@ repo = "easymotion/vim-easymotion"
 hook_add = "nmap ss <Plug>(easymotion-s2)"
 
 [[plugins]]
+repo = "nvim-treesitter/playground"
+
+[[plugins]]
 repo = "nvim-treesitter/nvim-treesitter"
-depends = ["windwp/nvim-ts-autotag"]
+depends = ["windwp/nvim-ts-autotag", "nvim-treesitter/playground"]
 hook_post_update = "TSUpdate"
 hook_add = """
 lua <<EOF
@@ -32,6 +35,7 @@ require("nvim-treesitter.configs").setup({
     highlight = { enable = true },
     indent = { enable = true },
     autotag = { enable = true },
+    playground = { enable = true },
 })
 EOF
 """
