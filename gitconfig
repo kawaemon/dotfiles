@@ -32,7 +32,7 @@
 [delta]
     plus-color = "#012800"
     minus-color = "#340001"
-    syntax-theme = Nord
+    syntax-theme = "Solarized (dark)"
 
 [interactive]
     diffFilter = delta --color-only
