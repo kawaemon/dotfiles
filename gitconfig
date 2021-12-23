@@ -30,9 +30,8 @@
 	defaultBranch = master
 
 [delta]
-    plus-color = "#012800"
-    minus-color = "#340001"
     syntax-theme = "Solarized (dark)"
+    line-numbers = true
 
 [interactive]
     diffFilter = delta --color-only
