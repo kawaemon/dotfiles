@@ -1,6 +1,7 @@
 vim.opt.fileencodings = "utf-8,cp932,sjis"
 vim.opt.lazyredraw = true
 
+vim.opt.tabstop = 4
 vim.opt.shiftwidth = 4
 vim.opt.expandtab = true
 
