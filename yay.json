@@ -1,0 +1,21 @@
+{
+	"rebuild": "no",
+	"sortby": "votes",
+	"searchby": "name-desc",
+	"removemake": "ask",
+	"requestsplitn": 150,
+	"completionrefreshtime": 7,
+	"sudoloop": false,
+	"timeupdate": false,
+	"devel": true,
+	"cleanAfter": false,
+	"provides": true,
+	"pgpfetch": true,
+	"upgrademenu": true,
+	"cleanmenu": true,
+	"diffmenu": true,
+	"editmenu": true,
+	"combinedupgrade": false,
+	"useask": false,
+	"batchinstall": false
+}
