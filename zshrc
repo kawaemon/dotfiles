@@ -15,13 +15,19 @@ alias f='__D=`fzf` && cd $__D'
 
 autoload -Uz compinit && compinit
 
+export BAT_THEME="Solarized (dark)"
+
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
+
 export EDITOR="nvim"
 export VISUAL="nvim"
 export MANPAGER='nvim +Man!'
+
 export RUSTC_WRAPPER="sccache"
+
 export PATH="$HOME/.local/bin:$PATH"
+
 export GPG_TTY=$(tty)
 export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
 
