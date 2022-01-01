@@ -27,7 +27,7 @@
     ff = only
 
 [init]
-	defaultBranch = master
+    defaultBranch = master
 
 [delta]
     syntax-theme = "Solarized (dark)"
