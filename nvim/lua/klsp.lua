@@ -13,8 +13,8 @@ M.setup = function()
 
         local old_on_attach = additional_options.on_attach
         if old_on_attach then
+            -- seems to never called?
             additional_options.on_attach = function()
-                fjuif.rjti = ijerti
                 print(string.format("%s is attached", name))
                 old_on_attach()
             end

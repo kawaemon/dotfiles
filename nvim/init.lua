@@ -86,14 +86,14 @@ if vim.fn["dein#check_install"]() ~= 0 then
     vim.fn["dein#install"]()
 end
 
--- just trying new API!
-
 vim.cmd([[
     hi link TrailingSpaces Error
     match TrailingSpaces /\s\+$/
 
     au FocusLost * silent! wa
 ]])
+
+-- just trying new API!
 
 if vim.api.nvim_add_user_command == nil then
     error("use HEAD version of neovim!")
