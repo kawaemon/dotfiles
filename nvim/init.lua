@@ -87,7 +87,7 @@ if vim.fn["dein#check_install"]() ~= 0 then
 end
 
 vim.cmd([[
-    hi link TrailingSpaces Error
+    hi TrailingSpaces gui=underline guifg=#268bd2
     match TrailingSpaces /\s\+$/
 
     au FocusLost * silent! wa

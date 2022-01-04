@@ -29,7 +29,8 @@ repo = "nvim-treesitter/nvim-treesitter"
 depends = ["windwp/nvim-ts-autotag", "nvim-treesitter/playground"]
 hook_post_update = "TSUpdate"
 hook_add = """
-hi! link TSError Error
+hi! clear TSError
+hi TSError gui=underline guifg=#dc322f
 
 lua <<EOF
 require("nvim-treesitter.configs").setup({
