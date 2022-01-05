@@ -66,6 +66,7 @@ EOF
 
 [[plugins]]
 repo = "kdheepak/lazygit.nvim"
+hook_add = "command! -nargs=0 Lg :LazyGit"
 
 [[plugins]]
 repo = "airblade/vim-gitgutter"
