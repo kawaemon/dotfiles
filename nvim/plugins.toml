@@ -34,9 +34,6 @@ depends = [
 hook_add = """
 command! -nargs=0 Lsp :lua require("klsp").setup()
 
-autocmd CursorHold * silent lua vim.lsp.buf.hover()
-set updatetime=500 " threshold of CursorHold
-
 lua <<EOF
 vim.cmd("set completeopt=menu,menuone,noselect")
 vim.diagnostic.config({
