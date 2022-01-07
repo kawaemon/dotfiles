@@ -82,7 +82,12 @@ cmp.setup({
         ["<S-Tab>"] = cmp.mapping(cmp.mapping.select_prev_item(), { "i", "s" }),
         ["<C-Space>"] = cmp.mapping(cmp.mapping.complete(), { 'i', 'c' }),
         ["<CR>"] = cmp.mapping.confirm({ select = true }),
-    }
+    },
+
+    experimental = {
+        ghost_text = true,
+        native_menu = true,
+    },
 })
 
 cmp.setup.cmdline("/", { sources = { { name = "buffer" } } })
