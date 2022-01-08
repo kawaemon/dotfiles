@@ -1,4 +1,5 @@
 # vim: ft=gitconfig
+
 [core]
     excludesfile = ~/.global_gitignore
     pager = delta
@@ -22,6 +23,9 @@
 
 [commit]
     gpgsign = true
+
+[merge]
+    conflictStyle = diff3
 
 [pull]
     ff = only
