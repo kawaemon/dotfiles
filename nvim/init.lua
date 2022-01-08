@@ -57,9 +57,9 @@ vim.api.nvim_set_keymap("n", "wl", "<C-w>l", mapopt)
 -- use esc-esc to remove search highlight
 vim.api.nvim_set_keymap("n", "<Esc><Esc>", ":nohlsearch<CR>", { noremap = true, silent = true })
 
-local vimrcDir = vim.env.HOME .. "/.config/nvim"
-local deinDir = vimrcDir .. "/dein"
-local deinRepoDir = deinDir .. "/repos/github.com/Shougo/dein.vim"
+local vimrcDir    = vim.env.HOME .. "/.config/nvim"
+local deinDir     = vimrcDir     .. "/dein"
+local deinRepoDir = deinDir      .. "/repos/github.com/Shougo/dein.vim"
 
 if vim.fn["isdirectory"](deinDir) == 0 then
     vim.fn["system"]("git clone https://github.com/Shougo/dein.vim " .. vim.fn["shellescape"](deinRepoDir))
@@ -90,7 +90,8 @@ vim.cmd([[
     hi TrailingSpaces gui=underline guifg=#268bd2
     match TrailingSpaces /\s\+$/
 
-    au FocusLost * silent! wa
+    autocmd FocusLost * silent! wa
+    autocmd Filetype go lua require("kft").on_ft("go")
 ]])
 
 -- just trying new API!
@@ -100,7 +101,7 @@ if vim.api.nvim_add_user_command == nil then
     return
 end
 
-local def_alias = function(name, cmd)
+local function def_alias(name, cmd)
     vim.api.nvim_add_user_command(name, function() vim.cmd(cmd) end, {})
 end
 
