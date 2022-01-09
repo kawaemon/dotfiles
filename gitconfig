@@ -26,6 +26,11 @@
 
 [merge]
     conflictStyle = diff3
+    tool = nvim
+
+[mergetool.nvim]
+    # https://github.com/git/git/blob/30bb8088afd4502acd2e166ddf7e4b071e53b86d/mergetools/vimdiff#L11
+    cmd = nvim -f -d -c '4wincmd w | wincmd J' "$LOCAL" "$REMOTE" "$BASE" "$MERGED"
 
 [pull]
     ff = only
