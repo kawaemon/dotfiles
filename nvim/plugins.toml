@@ -35,7 +35,7 @@ hook_add = """
 command! -nargs=0 Lsp :lua require("klsp").setup()
 
 lua <<EOF
-vim.cmd("set completeopt=menu,menuone,noselect")
+vim.cmd("set completeopt=menu,menuone,noselect,noinsert")
 vim.diagnostic.config({
     virtual_text = {
         prefix = "",
@@ -78,7 +78,7 @@ cmp.setup({
         ["<Tab>"] = cmp.mapping(cmp.mapping.select_next_item(), { "i", "s" }),
         ["<S-Tab>"] = cmp.mapping(cmp.mapping.select_prev_item(), { "i", "s" }),
         ["<C-Space>"] = cmp.mapping(cmp.mapping.complete(), { 'i', 'c' }),
-        ["<CR>"] = cmp.mapping.confirm({ select = true }),
+        ["<CR>"] = cmp.mapping.confirm({ select = false }),
     },
 
     experimental = {
