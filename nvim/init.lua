@@ -91,6 +91,7 @@ vim.cmd([[
     match TrailingSpaces /\s\+$/
 
     autocmd FocusLost * silent! wa
+    autocmd InsertLeave * silent! w
     autocmd Filetype go lua require("kft").on_ft("go")
 ]])
 
