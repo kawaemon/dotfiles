@@ -36,27 +36,7 @@ command! -nargs=0 Lsp :lua require("klsp").setup()
 
 lua <<EOF
 vim.cmd("set completeopt=menu,menuone,noselect,noinsert")
-vim.diagnostic.config({
-    virtual_text = {
-        prefix = "",
-        spacing = 0,
-        format = function(diagnostic)
-            local severity = ""
-
-            if diagnostic.severity == vim.diagnostic.severity.ERROR then
-                severity = "E"
-            elseif diagnostic.severity == vim.diagnostic.severity.WARN then
-                severity = "W"
-            elseif diagnostic.severity == vim.diagnostic.severity.INFO then
-                severity = "I"
-            elseif diagnostic.severity == vim.diagnostic.severity.HINT then
-                severity = "H"
-            end
-
-            return string.format("%s: %s", severity, diagnostic.message)
-        end
-    }
-})
+vim.diagnostic.config({ virtual_text = false })
 
 local cmp = require("cmp")
 local luasnip = require("luasnip")
