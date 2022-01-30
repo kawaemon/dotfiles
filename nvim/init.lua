@@ -90,6 +90,7 @@ vim.cmd([[
     hi TrailingSpaces gui=underline guifg=#268bd2
     match TrailingSpaces /\s\+$/
 
+    autocmd StdinReadPost * set nomodified
     autocmd FocusLost * silent! wa
     autocmd Filetype go lua require("kft").on_ft("go")
 ]])
