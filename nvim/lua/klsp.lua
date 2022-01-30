@@ -43,17 +43,23 @@ M.setup = function()
         },
     })
 
-    vim.api.nvim_set_keymap("n", "K", "<Cmd>lua vim.lsp.buf.hover()<CR>", { noremap = true, silent = true })
+    vim.api.nvim_set_keymap("n", "K", '<Cmd>lua require("klsp").hover()<CR>', { noremap = true, silent = true })
 
     vim.cmd([[
-        command! -nargs=0 Hover <Cmd>lua vim.lsp.buf.hover()
-        command! -nargs=0 CodeAction <Cmd>lua vim.lsp.buf.code_action()
-        command! -nargs=0 Definition <Cmd>lua vim.lsp.buf.definition()
-        command! -nargs=0 Implementation <Cmd>lua vim.lsp.buf.implementation()
-        command! -nargs=0 Rename <Cmd>lua vim.lsp.buf.rename()
-        command! -nargs=0 References <Cmd>lua vim.lsp.buf.references()
+        command! -nargs=0 CodeAction <Cmd>lua vim.lsp.buf.code_action()<CR>
+        command! -nargs=0 Definition <Cmd>lua vim.lsp.buf.definition()<CR>
+        command! -nargs=0 Implementation <Cmd>lua vim.lsp.buf.implementation()<CR>
+        command! -nargs=0 Rename <Cmd>lua vim.lsp.buf.rename()<CR>
+        command! -nargs=0 References <Cmd>lua vim.lsp.buf.references()<CR>
         LspStart
     ]])
+end
+
+M.hover = function()
+    diagnostic = vim.diagnostic.open_float()
+    if diagnostic == nil then
+        vim.lsp.buf.hover()
+    end
 end
 
 return M
