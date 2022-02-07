@@ -23,6 +23,14 @@ M.setup = function()
         lspconfig[name].setup(additional_options)
     end
 
+    -- https://github.com/neovim/neovim/blob/46bd48f7e902250dbccdea71ec6eb3888588133f/runtime/lua/vim/lsp/handlers.lua#L309
+    -- https://github.com/neovim/neovim/blob/46bd48f7e902250dbccdea71ec6eb3888588133f/runtime/lua/vim/lsp/util.lua#L1439
+    vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(
+        vim.lsp.handlers.hover, {
+            focusable = false,
+        }
+    )
+
     init_lsp("tsserver", {})
     init_lsp("clangd", {})
 
@@ -56,8 +64,13 @@ M.setup = function()
 end
 
 M.hover = function()
-    diagnostic = vim.diagnostic.open_float()
-    if diagnostic == nil then
+    -- https://github.com/neovim/neovim/blob/46bd48f7e902250dbccdea71ec6eb3888588133f/runtime/lua/vim/diagnostic.lua#L1212
+    -- https://github.com/neovim/neovim/blob/46bd48f7e902250dbccdea71ec6eb3888588133f/runtime/lua/vim/diagnostic.lua#L1346
+    buffer = vim.diagnostic.open_float({
+        focusable = false
+    })
+
+    if buffer == nil then
         vim.lsp.buf.hover()
     end
 end
