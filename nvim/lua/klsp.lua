@@ -54,11 +54,11 @@ M.setup = function()
     vim.api.nvim_set_keymap("n", "K", '<Cmd>lua require("klsp").hover()<CR>', { noremap = true, silent = true })
 
     vim.cmd([[
-        command! -nargs=0 CodeAction <Cmd>lua vim.lsp.buf.code_action()<CR>
-        command! -nargs=0 Definition <Cmd>lua vim.lsp.buf.definition()<CR>
-        command! -nargs=0 Implementation <Cmd>lua vim.lsp.buf.implementation()<CR>
-        command! -nargs=0 Rename <Cmd>lua vim.lsp.buf.rename()<CR>
-        command! -nargs=0 References <Cmd>lua vim.lsp.buf.references()<CR>
+        command! -nargs=0 CodeAction     lua vim.lsp.buf.code_action()
+        command! -nargs=0 Definition     lua vim.lsp.buf.definition()
+        command! -nargs=0 Implementation lua vim.lsp.buf.implementation()
+        command! -nargs=0 Rename         lua vim.lsp.buf.rename()
+        command! -nargs=0 References     lua vim.lsp.buf.references()
         LspStart
     ]])
 end
