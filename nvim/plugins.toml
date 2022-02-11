@@ -61,9 +61,12 @@ cmp.setup({
         ["<CR>"] = cmp.mapping.confirm({ select = false }),
     },
 
+    view = {
+        entries = "native",
+    },
+
     experimental = {
         ghost_text = true,
-        native_menu = true,
     },
 })
 
