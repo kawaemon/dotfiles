@@ -27,6 +27,7 @@ export MANPAGER='nvim +Man!'
 export RUSTC_WRAPPER="sccache"
 
 export PATH="$HOME/.local/bin:$HOME/go/bin:$PATH"
+export PATH="$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH"
 
 export GPG_TTY=$(tty)
 export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
