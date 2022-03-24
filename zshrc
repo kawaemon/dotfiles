@@ -13,7 +13,24 @@ alias cz="nvm exec default cz"
 alias repo='__D=`ghq list | fzf` && cd "$HOME/repo/$__D"'
 alias f='__D=`fzf` && cd $__D'
 
+setopt autocd \
+       nomatch \
+       correct \
+       automenu \
+       list_packed \
+       extendedglob \
+       interactive_comments
+
+unsetopt beep
+
+zstyle ':completion:*' menu select=5 # highlight selection in menu
+
 autoload -Uz compinit && compinit
+
+eval "$(zr jeffreytse/zsh-vi-mode \
+       zsh-users/zsh-autosuggestions \
+       zsh-users/zsh-syntax-highlighting \
+       junegunn/fzf.git/shell/key-bindings.zsh)"
 
 export BAT_THEME="Solarized (dark)"
 
@@ -35,38 +52,3 @@ export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
 gpgconf --launch gpg-agent
 
 source ~/.cargo/env
-
-# Vim key bindings
-# from: https://github.com/shun-shobon/dotfiles/blob/master/.config/zsh/rc/keybind.zsh
-bindkey -d
-bindkey -v
-
-KEYTIMEOUT=1
-
-bindkey -M viins '^?' backward-delete-char
-bindkey -M viins '^H' backward-delete-char
-
-function zle-keymap-select() {
-    case ${KEYMAP} in
-        vicmd)
-            print -n '\033[2 q'
-            ;;
-        viins|main)
-            print -n '\033[6 q'
-            ;;
-    esac
-    zle reset-prompt
-    zle -R
-}
-
-function zle-line-init() {
-    zle-keymap-select
-}
-
-function zle-line-finish() {
-    print -n '\033[6 q'
-}
-
-zle -N zle-line-init
-zle -N zle-line-finish
-zle -N zle-keymap-select
