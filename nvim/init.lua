@@ -63,10 +63,6 @@ vim.api.nvim_set_keymap("n", "<Esc><Esc>", ":nohlsearch<CR>", { noremap = true, 
 vim.cmd([[
     hi TrailingSpaces gui=underline guifg=#268bd2
     match TrailingSpaces /\s\+$/
-
-    autocmd StdinReadPost * set nomodified
-    autocmd FocusLost * silent! wa
-    autocmd Filetype go lua require("kft").on_ft("go")
 ]])
 
 -- just trying new API!
@@ -76,6 +72,21 @@ if vim.api.nvim_add_user_command == nil then
     return
 end
 
+vim.api.nvim_create_autocmd("StdinReadPost", {
+    pattern = {"*"},
+    callback = function() vim.opt.modified = false end,
+})
+
+vim.api.nvim_create_autocmd("FocusLost", {
+    pattern = {"*"},
+    command = "silent! wa"
+})
+
+vim.api.nvim_create_autocmd("Filetype", {
+    pattern = {"go"},
+    callback = function() require("kft").on_ft("go") end,
+})
+
 local function def_alias(name, cmd)
     vim.api.nvim_add_user_command(name, function() vim.cmd(cmd) end, {})
 end
@@ -83,4 +94,5 @@ end
 def_alias("W", "w")
 def_alias("Wq", "wq")
 def_alias("WQ", "wq")
+def_alias("Q", "q")
 
