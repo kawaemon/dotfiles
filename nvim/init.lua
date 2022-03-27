@@ -14,6 +14,7 @@ vim.opt.hidden = true
 vim.opt.number = true
 vim.opt.updatetime = 300
 vim.opt.signcolumn = "yes"
+vim.opt.laststatus = 3
 vim.opt.wrap = false
 vim.opt.title = true
 vim.opt.termguicolors = true
