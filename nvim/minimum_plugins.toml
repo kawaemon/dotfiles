@@ -84,6 +84,3 @@ merged = 0
 repo = "junegunn/fzf.vim"
 depends = "fzf"
 hook_add = "command! -nargs=0 F :Files"
-
-[[plugins]]
-repo = "wakatime/vim-wakatime"
