@@ -10,6 +10,11 @@ font:
 mouse:
     hide_when_typing: true
 
+
+key_bindings:
+    - { key: Q, mods: Control, chars: "\x11" }
+    - { key: "LBracket", mods: Control, chars: "\x1b" }
+
 # Colors (Solarized Dark)
 colors:
   # Default colors
