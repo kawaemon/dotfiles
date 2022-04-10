@@ -7,24 +7,25 @@ vim.opt.tabstop = 4
 vim.opt.shiftwidth = 4
 vim.opt.expandtab = true
 
-vim.opt.autoindent = true
-vim.opt.autoread = true
-vim.opt.cursorline = true
-vim.opt.hidden = true
-vim.opt.number = true
-vim.opt.updatetime = 300
-vim.opt.signcolumn = "yes"
-vim.opt.laststatus = 3
 vim.opt.wrap = false
 vim.opt.title = true
+vim.opt.hidden = true
+vim.opt.number = true
+vim.opt.autoread = true
+vim.opt.laststatus = 3
+vim.opt.autoindent = true
+vim.opt.cursorline = true
+vim.opt.updatetime = 300
+vim.opt.signcolumn = "yes"
 vim.opt.termguicolors = true
 
+vim.opt.mouse = "a"
 vim.opt.clipboard = "unnamedplus"
 vim.opt.showmatch = true
-vim.opt.matchpairs:append({ "<:>" })
-vim.opt.ignorecase = true
 vim.opt.smartcase = true
-vim.opt.mouse = "a"
+vim.opt.ignorecase = true
+vim.opt.matchpairs:append({ "<:>" })
+vim.opt.diffopt:append({ "algorithm:histogram" })
 
 vim.opt.matchtime = 2
 vim.opt.pumheight = 20

@@ -38,6 +38,9 @@
 [init]
     defaultBranch = master
 
+[diff]
+    algorithm = histogram
+
 [delta]
     syntax-theme = "Solarized (dark)"
     line-numbers = true
@@ -47,3 +50,4 @@
 
 [ghq]
     root = ~/repo
+
