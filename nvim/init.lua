@@ -72,13 +72,6 @@ vim.cmd([[
     hi! NonText guifg=#0a4c5c
 ]])
 
--- just trying new API!
-
-if vim.api.nvim_add_user_command == nil then
-    error("use HEAD version of neovim!")
-    return
-end
-
 vim.api.nvim_create_autocmd("StdinReadPost", {
     pattern = {"*"},
     callback = function() vim.opt.modified = false end,
