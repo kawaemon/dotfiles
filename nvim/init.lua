@@ -7,6 +7,13 @@ vim.opt.tabstop = 4
 vim.opt.shiftwidth = 4
 vim.opt.expandtab = true
 
+vim.opt.list = true
+vim.opt.listchars = {
+    tab = "> ",
+    lead = ".",
+    trail = "!"
+}
+
 vim.opt.wrap = false
 vim.opt.title = true
 vim.opt.hidden = true
@@ -62,8 +69,7 @@ vim.api.nvim_set_keymap("n", "wl", "<C-w><Right>", mapopt)
 vim.api.nvim_set_keymap("n", "<Esc><Esc>", ":nohlsearch<CR>", { noremap = true, silent = true })
 
 vim.cmd([[
-    hi TrailingSpaces gui=underline guifg=#268bd2
-    match TrailingSpaces /\s\+$/
+    hi! NonText guifg=#0a4c5c
 ]])
 
 -- just trying new API!
