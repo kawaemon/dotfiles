@@ -22,3 +22,6 @@ ln -sfv $PWD/yay.json $HOME/.config/yay/config.json
 
 mkdir -p $HOME/.config/lazygit/
 ln -sfv $PWD/lazygit.yml $HOME/.config/lazygit/config.yml
+
+mkdir -p $HOME/.cargo/
+ln -sfv $PWD/cargo.toml $HOME/.cargo/config.toml
