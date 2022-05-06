@@ -40,6 +40,7 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 export EDITOR="nvim"
 export VISUAL="nvim"
 export MANPAGER='nvim +Man!'
+export MANWIDTH=999
 
 export RUSTC_WRAPPER="sccache"
 

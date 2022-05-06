@@ -37,6 +37,8 @@ vim.opt.diffopt:append({ "algorithm:histogram" })
 vim.opt.matchtime = 2
 vim.opt.pumheight = 20
 
+vim.g["man_hardwrap"] = 0
+
 local mapopt = { noremap = true, silent = true }
 
 -- disable arrow keys, help key, macro key, ex-mode key.
