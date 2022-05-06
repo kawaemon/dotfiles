@@ -85,8 +85,8 @@ vim.api.nvim_create_autocmd("FocusLost", {
 })
 
 vim.api.nvim_create_autocmd("Filetype", {
-    pattern = {"go"},
-    callback = function() require("kft").on_ft("go") end,
+    pattern = {"*"},
+    callback = function() require("kft").on_ft(vim.bo.filetype) end,
 })
 
 local function def_alias(name, cmd)
