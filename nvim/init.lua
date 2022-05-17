@@ -10,7 +10,6 @@ vim.opt.expandtab = true
 vim.opt.list = true
 vim.opt.listchars = {
     tab = "> ",
-    lead = ".",
     trail = "!"
 }
 

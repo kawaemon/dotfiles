@@ -18,6 +18,16 @@ hook_add = "lua require('lualine').setup({ theme = 'solarized_dark' })"
 repo = "windwp/nvim-ts-autotag"
 
 [[plugins]]
+repo = "lukas-reineke/indent-blankline.nvim"
+hook_add = """
+lua <<EOF
+    require('indent_blankline').setup({
+        show_current_context = true,
+    })
+EOF
+"""
+
+[[plugins]]
 repo = "easymotion/vim-easymotion"
 hook_add = "nmap ss <Plug>(easymotion-s2)"
 
