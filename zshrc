@@ -43,7 +43,7 @@ export MANWIDTH=999
 
 export RUSTC_WRAPPER="sccache"
 
-export PATH="$HOME/.local/bin:$HOME/go/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/go/bin:$HOME/.cargo/bin:$PATH"
 export PATH="$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH"
 
 export GPG_TTY=$(tty)
