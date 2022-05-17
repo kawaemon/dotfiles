@@ -12,7 +12,7 @@ hook_add = "lua require('tabline').setup({ enable = true })"
 
 [[plugins]]
 repo = "nvim-lualine/lualine.nvim"
-hook_add = "lua require('lualine').setup({ theme = 'nord' })"
+hook_add = "lua require('lualine').setup({ theme = 'solarized_dark' })"
 
 [[plugins]]
 repo = "windwp/nvim-ts-autotag"
@@ -49,13 +49,12 @@ hook_add = """
 command! -nargs=0 Tree :NvimTreeToggle
 
 lua <<EOF
--- disable default 's' key mapping
--- (opens file with system default editor)
 require("nvim-tree").setup({
     open_on_setup = true,
     view = {
         auto_resize = true,
         mappings = {
+            -- disable default 's' key mapping (opens file with system default editor)
             list = { { key = "s" } }
         }
     }

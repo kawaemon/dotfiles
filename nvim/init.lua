@@ -75,18 +75,20 @@ vim.cmd([[
 ]])
 
 vim.api.nvim_create_autocmd("StdinReadPost", {
-    pattern = {"*"},
+    pattern = "*",
     callback = function() vim.opt.modified = false end,
 })
 
 vim.api.nvim_create_autocmd("FocusLost", {
-    pattern = {"*"},
+    pattern = "*",
     command = "silent! wa"
 })
 
+local kft = require("kft")
+
 vim.api.nvim_create_autocmd("Filetype", {
-    pattern = {"*"},
-    callback = function() require("kft").on_ft(vim.bo.filetype) end,
+    pattern = "*",
+    callback = function() kft.on_ft(vim.bo.filetype) end,
 })
 
 local function def_alias(name, cmd)

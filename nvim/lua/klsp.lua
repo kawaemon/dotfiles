@@ -1,28 +1,6 @@
 local M = {}
 
 M.setup = function()
-    local cmp = require("cmp")
-    local lspconfig = require("lspconfig")
-    local cmp_nvim_lsp = require("cmp_nvim_lsp")
-
-    local capabilities = vim.lsp.protocol.make_client_capabilities()
-    capabilities = cmp_nvim_lsp.update_capabilities(capabilities)
-
-    local init_lsp = function(name, additional_options)
-        additional_options.capabilities = capabilities
-
-        local old_on_attach = additional_options.on_attach
-        if old_on_attach then
-            -- seems to never called?
-            additional_options.on_attach = function()
-                print(string.format("%s is attached", name))
-                old_on_attach()
-            end
-        end
-
-        lspconfig[name].setup(additional_options)
-    end
-
     -- https://github.com/neovim/neovim/blob/46bd48f7e902250dbccdea71ec6eb3888588133f/runtime/lua/vim/lsp/handlers.lua#L309
     -- https://github.com/neovim/neovim/blob/46bd48f7e902250dbccdea71ec6eb3888588133f/runtime/lua/vim/lsp/util.lua#L1439
     vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(
@@ -30,6 +8,40 @@ M.setup = function()
             focusable = false,
         }
     )
+
+    vim.api.nvim_set_keymap("n", "K", '<Cmd>lua require("klsp").hover()<CR>', { noremap = true, silent = true })
+
+    vim.api.nvim_add_user_command("Rename", vim.lsp.buf.rename, {})
+    vim.api.nvim_add_user_command("CodeAction", vim.lsp.buf.code_action, {})
+    vim.api.nvim_add_user_command("Definition",  vim.lsp.buf.definition, {})
+    vim.api.nvim_add_user_command("References", vim.lsp.buf.references, {})
+    vim.api.nvim_add_user_command("Implementation", vim.lsp.buf.implementation, {})
+
+    local cmp = require("cmp")
+    local lspconfig = require("lspconfig")
+    local cmp_nvim_lsp = require("cmp_nvim_lsp")
+
+    local capabilities = vim.lsp.protocol.make_client_capabilities()
+    capabilities = cmp_nvim_lsp.update_capabilities(capabilities)
+
+    local init_lsp = function(name, opts)
+        lspconfig[name].setup({
+            cmd = opts.cmd,
+            settings = opts.settings,
+            capabilities = capabilities,
+            on_attach = function(client)
+                local attach_msg = "lsp: " .. name .. " is attached."
+                if opts.attach_msg then
+                    attach_msg = attach_msg .. " " .. opts.attach_msg
+                end
+                print(attach_msg)
+
+                if opts.on_attach then
+                    opts.on_attach()
+                end
+            end
+        })
+    end
 
     init_lsp("tsserver", {})
     init_lsp("clangd", {})
@@ -46,21 +58,13 @@ M.setup = function()
 
     init_lsp("gopls", {
         cmd = { "gopls", "serve", "--debug=localhost:6060" },
+        additional_msg = "debugging is available at localhost:6060",
         settings = {
-            gopls = { staticcheck = true },
+            ["gopls"] = { staticcheck = true },
         },
     })
 
-    vim.api.nvim_set_keymap("n", "K", '<Cmd>lua require("klsp").hover()<CR>', { noremap = true, silent = true })
-
-    vim.cmd([[
-        command! -nargs=0 CodeAction     lua vim.lsp.buf.code_action()
-        command! -nargs=0 Definition     lua vim.lsp.buf.definition()
-        command! -nargs=0 Implementation lua vim.lsp.buf.implementation()
-        command! -nargs=0 Rename         lua vim.lsp.buf.rename()
-        command! -nargs=0 References     lua vim.lsp.buf.references()
-        LspStart
-    ]])
+    vim.cmd("LspStart")
 end
 
 M.hover = function()
