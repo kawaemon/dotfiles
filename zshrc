@@ -13,8 +13,7 @@ alias cz="nvm exec default cz"
 alias repo='__D=`ghq list | fzf` && cd "$HOME/repo/$__D"'
 alias f='__D=`fzf` && cd $__D'
 
-setopt autocd \
-       nomatch \
+setopt nomatch \
        correct \
        automenu \
        list_packed \
