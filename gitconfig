@@ -51,3 +51,5 @@
 [ghq]
     root = ~/repo
 
+[rerere]
+	enabled = true
