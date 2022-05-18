@@ -91,7 +91,7 @@ vim.api.nvim_create_autocmd("Filetype", {
 })
 
 local function def_alias(name, cmd)
-    vim.api.nvim_add_user_command(name, function() vim.cmd(cmd) end, {})
+    vim.api.nvim_create_user_command(name, function() vim.cmd(cmd) end, {})
 end
 
 def_alias("W", "w")
