@@ -77,7 +77,17 @@ repo = "kdheepak/lazygit.nvim"
 hook_add = "command! -nargs=0 Lg :LazyGit"
 
 [[plugins]]
-repo = "airblade/vim-gitgutter"
+repo = "lewis6991/gitsigns.nvim"
+hook_add = """
+lua <<EOF
+    require('gitsigns').setup()
+    vim.api.nvim_create_user_command(
+        "Blame",
+        function() vim.cmd("Gitsigns toggle_current_line_blame") end,
+        {}
+    )
+EOF
+"""
 
 [[plugins]]
 repo = "ishan9299/nvim-solarized-lua"
