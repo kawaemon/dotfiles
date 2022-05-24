@@ -59,6 +59,27 @@ hook_add = """
 command! -nargs=0 Tree :NvimTreeToggle
 
 lua <<EOF
+vim.g.nvim_tree_icons = {
+    git_icons = {
+       unstaged = "",
+       staged = "",
+       unmerged = "",
+       renamed = "➜",
+       untracked = "",
+       deleted = "",
+       ignored = "",
+    }
+}
+
+vim.g.nvim_tree_show_icons = {
+    git = 1,
+    folders = 1,
+    folder_arrows = 1,
+    files = 0,
+}
+
+vim.g.nvim_tree_special_files = {}
+
 require("nvim-tree").setup({
     open_on_setup = true,
     view = {
