@@ -2,6 +2,10 @@
 repo = "neovim/nvim-lspconfig"
 
 [[plugins]]
+repo = "folke/trouble.nvim"
+hook_add = "lua require('trouble').setup()"
+
+[[plugins]]
 repo = "hrsh7th/cmp-buffer"
 
 [[plugins]]
