@@ -10,7 +10,7 @@ alias v=nvim
 alias lg=lazygit
 alias vimdiff="nvim -d"
 alias repo='__D=`ghq list | fzf` && cd "$HOME/repo/$__D"'
-alias temp='__D=`mktemp -d /tmp/kXXX` && cd "/tmp/$__D"'
+alias temp='__D=`mktemp -d /tmp/kXXX` && cd "$__D"'
 
 setopt nomatch \
        correct \
