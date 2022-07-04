@@ -1,7 +1,7 @@
 vim.opt.fileencodings = "utf-8,cp932,sjis"
 vim.opt.lazyredraw = true
 
-require("kdein")
+require("kplugin")
 
 vim.opt.tabstop = 4
 vim.opt.shiftwidth = 4
@@ -33,6 +33,11 @@ vim.opt.ignorecase = true
 vim.opt.matchpairs:append({ "<:>" })
 vim.opt.diffopt:append({ "algorithm:histogram" })
 
+vim.cmd([[
+    highlight Normal guibg=none
+    highlight NonText guibg=none
+]])
+
 vim.opt.matchtime = 2
 vim.opt.pumheight = 20
 
@@ -47,10 +52,10 @@ for i, v in ipairs(disallowedKeys) do
     vim.api.nvim_set_keymap("i", v, "<Nop>", mapopt)
 end
 
-disallowedKeys = { "q", "Q" }
-for i, v in ipairs(disallowedKeys) do
-    vim.api.nvim_set_keymap("n", v, "<Nop>", mapopt)
-end
+-- disallowedKeys = { "q", "Q" }
+-- for i, v in ipairs(disallowedKeys) do
+--     vim.api.nvim_set_keymap("n", v, "<Nop>", mapopt)
+-- end
 
 -- use Y to yank from cursor to end of line
 vim.api.nvim_set_keymap("n", "Y", "y$", mapopt)
