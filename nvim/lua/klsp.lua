@@ -31,8 +31,8 @@ M.setup = function()
             capabilities = capabilities,
             on_attach = function(client)
                 local attach_msg = "lsp: " .. name .. " is attached."
-                if opts.attach_msg then
-                    attach_msg = attach_msg .. " " .. opts.attach_msg
+                if opts.additional_msg then
+                    attach_msg = attach_msg .. " " .. opts.additional_msg
                 end
                 print(attach_msg)
 
