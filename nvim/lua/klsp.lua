@@ -47,7 +47,7 @@ M.setup = function()
     init_lsp("clangd", {})
 
     init_lsp("rust_analyzer", {
-        cmd = { "rustup", "run", "nightly", "rust-analyzer" },
+        cmd = { "rust-analyzer" },
         settings = {
             ["rust-analyzer"] = {
                 procMacro = { enable = true },
