@@ -23,20 +23,6 @@ unsetopt beep
 
 zstyle ':completion:*' menu select=5 # highlight selection in menu
 
-if [[ ! -f ~/.zr.zsh ]] || [[ ~/.zshrc.shared -nt ~/.zr.zsh ]]; then
-    zr jeffreytse/zsh-vi-mode \
-       zsh-users/zsh-autosuggestions \
-       zsh-users/zsh-syntax-highlighting \
-       junegunn/fzf.git/shell/key-bindings.zsh \
-    > ~/.zr.zsh
-    zcompile ~/.zr.zsh
-fi
-
-source ~/.zr.zsh
-
-# automatically called by .zr.zsh
-# autoload -U compinit && compinit
-
 export BAT_THEME="Solarized (dark)"
 
 export DOCKER_BUILDKIT=1
@@ -56,3 +42,18 @@ export GPG_TTY=$(tty)
 export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
 
 gpgconf --launch gpg-agent
+
+if [[ ! -f ~/.zr.zsh ]] || [[ ~/.zshrc.shared -nt ~/.zr.zsh ]]; then
+    zr jeffreytse/zsh-vi-mode \
+       zsh-users/zsh-autosuggestions \
+       zsh-users/zsh-syntax-highlighting \
+       junegunn/fzf.git/shell/key-bindings.zsh \
+    > ~/.zr.zsh
+    zcompile ~/.zr.zsh
+fi
+
+source ~/.zr.zsh
+
+# automatically called by .zr.zsh
+# autoload -U compinit && compinit
+
