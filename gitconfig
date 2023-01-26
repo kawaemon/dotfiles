@@ -3,6 +3,7 @@
 [core]
     excludesfile = ~/.global_gitignore
     pager = delta
+    autocrlf = input
 
 [user]
     email = me@kawaemon.dev
