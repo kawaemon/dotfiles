@@ -28,6 +28,8 @@ export BAT_THEME="Solarized (dark)"
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 
+export RUST_BACKTRACE=1
+
 export EDITOR="nvim"
 export VISUAL="nvim"
 export MANPAGER='nvim +Man!'
