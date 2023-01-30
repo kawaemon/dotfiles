@@ -46,7 +46,7 @@ export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
 gpgconf --launch gpg-agent
 
 if [[ ! -f ~/.zr.zsh ]] || [[ ~/.zshrc.shared -nt ~/.zr.zsh ]]; then
-    zr jeffreytse/zsh-vi-mode \
+    zr kawaemon/zsh-vi-mode \
        zsh-users/zsh-autosuggestions \
        zsh-users/zsh-syntax-highlighting \
        junegunn/fzf.git/shell/key-bindings.zsh \
