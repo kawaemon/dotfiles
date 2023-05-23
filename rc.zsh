@@ -11,6 +11,7 @@ alias lg=lazygit
 alias vimdiff="nvim -d"
 alias repo='__D=`ghq list | fzf` && cd "$HOME/repo/$__D"'
 alias temp='mkdir -p /tmp/ktmp && __D=`mktemp -d /tmp/ktmp/XXX` && cd "$__D"'
+alias gitd='GIT_EXTERNAL_DIFF=difft git'
 
 setopt nomatch \
        correct \
