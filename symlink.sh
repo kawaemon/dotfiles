@@ -8,6 +8,7 @@ fi
 echo
 
 ln -sfvn $PWD/nvim $HOME/.config/nvim
+
 ln -sfv $PWD/gitconfig $HOME/.gitconfig
 ln -sfv $PWD/global_gitignore $HOME/.global_gitignore
 ln -sfv $PWD/tmux.conf $HOME/.tmux.conf
@@ -17,6 +18,9 @@ mkdir -p $HOME/.config/alacritty/
 ln -sfv $PWD/alacritty.yml $HOME/.config/alacritty/alacritty.yml
 ln -sfv $PWD/starship.toml $HOME/.config/starship.toml
 
+mkdir -p $HOME/.config/i3/
+ln -sfv $PWD/i3config $HOME/.config/i3/config
+
 mkdir -p $HOME/.config/yay/
 ln -sfv $PWD/yay.json $HOME/.config/yay/config.json
 
@@ -25,3 +29,4 @@ ln -sfv $PWD/lazygit.yml $HOME/.config/lazygit/config.yml
 
 mkdir -p $HOME/.cargo/
 ln -sfv $PWD/cargo.toml $HOME/.cargo/config.toml
+
