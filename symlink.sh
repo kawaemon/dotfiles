@@ -21,6 +21,8 @@ ln -sfv $PWD/starship.toml $HOME/.config/starship.toml
 mkdir -p $HOME/.config/i3/
 ln -sfv $PWD/i3config $HOME/.config/i3/config
 
+ln -sfvn $PWD/polybar $HOME/.config/polybar
+
 mkdir -p $HOME/.config/yay/
 ln -sfv $PWD/yay.json $HOME/.config/yay/config.json
 
