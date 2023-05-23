@@ -45,6 +45,7 @@
 
 [diff]
     algorithm = histogram
+    colorMoved = dimmed-zebra
 
 [delta]
     syntax-theme = "Solarized (dark)"
