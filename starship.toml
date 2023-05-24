@@ -1,4 +1,7 @@
 command_timeout = 50
 
+[aws]
+disabled = true
+
 [gcloud]
 disabled = true
