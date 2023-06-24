@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+bg     = '#002b36'
+fg     = '#839496'
+black  = '#073642'
+white  = '#eee8d5'
+yellow = '#b58900'
+red    = '#dc322f'
+gray   = '#576466'
+green  = '#859900'
+
+low = "low-power"
+balanced = "balanced"
+perf = "performance"
+
+_print = print
+print = lambda d: _print(d, end="")
+println = lambda d: _print(d)
+
+def setcolor(f, b):
+    return f"%{{B{b}}}%{{F{f}}}"
+def unsetcolor():
+    return "%{B-}%{F-}"
+
+with open("/sys/firmware/acpi/platform_profile", "r") as f:
+    prof = f.read()
+
+match prof.strip():
+    case "low-power":
+        print(f"{setcolor(green, bg)}lp{unsetcolor()}")
+    case "balanced":
+        print(f"{setcolor(gray, bg)}-{unsetcolor()}")
+    case "performance":
+        with open("/sys/devices/platform/thinkpad_acpi/dytc_lapmode", "r") as f:
+            is_lapmode = bool(int(f.read()))
+
+        text = "perf"
+        if is_lapmode:
+            text += "*"
+
+        print(f"{setcolor(red, bg)}{text}{unsetcolor()}")

@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+import subprocess
+
+bg     = '#002b36'
+fg     = '#839496'
+black  = '#073642'
+white  = '#eee8d5'
+yellow = '#b58900'
+red    = '#dc322f'
+gray   = '#576466'
+green  = '#859900'
+
+_print = print
+print = lambda d: _print(d, end="")
+println = lambda d: _print(d)
+
+def setcolor(f, b):
+    return f"%{{B{b}}}%{{F{f}}}"
+def unsetcolor():
+    return "%{B-}%{F-}"
+
+res = subprocess.check_output(["sensors"]).decode()
+for line in res.split("\n"):
+    if "fan1" in line:
+        rpm = int(line.split()[1])
+
+if rpm >= 7000:
+    print(setcolor(black, red))
+elif rpm >= 6000:
+    print(setcolor(yellow, bg))
+print(f"{rpm:4} RPM")
+print(unsetcolor())
