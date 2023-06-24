@@ -13,6 +13,7 @@ exec --no-startup-id fcitx-autostart
 exec --no-startup-id flameshot
 exec --no-startup-id xfce4-power-manager
 exec --no-startup-id ~/.fehbg
+exec --no-startup-id gnome-keyring-daemon --start --components=ssh,secrets,pkcs11
 
 # Use pactl to adjust volume in PulseAudio.
 set $refresh_i3status killall -SIGUSR1 i3status
