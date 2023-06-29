@@ -1,7 +1,7 @@
 # vim: ft=gitconfig
 
 [core]
-    excludesfile = ~/.global_gitignore
+    excludesfile = ~/repo/github.com/kawaemon/dotfiles/git/global_gitignore
     pager = delta
     autocrlf = input
 
@@ -9,6 +9,14 @@
     email = me@kawaemon.dev
     name = kawaemon
     signingKey = 26964048E4EFF64184AF77F3E6489583F95924E1
+
+[includeIf "gitdir:~/repo/github.com/C-Style-team/"]
+    path = ~/repo/github.com/kawaemon/dotfiles/git/work-profile/c-style
+
+[includeIf "gitdir:~/repo/github.com/yumemi/"]
+    path = ~/repo/github.com/kawaemon/dotfiles/git/work-profile/yumemi
+[includeIf "gitdir:~/repo/github.com/yumemi-inc/"]
+    path = ~/repo/github.com/kawaemon/dotfiles/git/work-profile/yumemi
 
 [alias]
     a = add

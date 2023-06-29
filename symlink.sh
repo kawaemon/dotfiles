@@ -9,7 +9,7 @@ echo
 
 ln -sfvn $PWD/nvim $HOME/.config/nvim
 
-ln -sfv $PWD/gitconfig $HOME/.gitconfig
+ln -sfv $PWD/git/base $HOME/.gitconfig
 ln -sfv $PWD/global_gitignore $HOME/.global_gitignore
 ln -sfv $PWD/tmux.conf $HOME/.tmux.conf
 ln -sfv $PWD/rc.zsh $HOME/.zshrc.shared
