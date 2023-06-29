@@ -24,7 +24,10 @@ for line in res.split("\n"):
     if "fan1" in line:
         rpm = int(line.split()[1])
 
-if rpm >= 7000:
+if rpm == 65535:
+    # sensor error
+    pass
+elif rpm >= 7000:
     print(setcolor(black, red))
 elif rpm >= 6000:
     print(setcolor(yellow, bg))
