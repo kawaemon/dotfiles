@@ -31,5 +31,5 @@ elif rpm >= 7000:
     print(setcolor(black, red))
 elif rpm >= 6000:
     print(setcolor(yellow, bg))
-print(f"{rpm:4} RPM")
+print(f"{rpm // 1000:1} kRPM")
 print(unsetcolor())
