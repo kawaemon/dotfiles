@@ -22,7 +22,7 @@ mkdir -p $HOME/.config/i3/
 ln -sfv $PWD/i3config $HOME/.config/i3/config
 
 mkdir -p $HOME/.config/flameshot/
-ln -sfv $PWD/i3config $HOME/.config/flameshot/flameshot.ini
+ln -sfv $PWD/flameshot.ini $HOME/.config/flameshot/flameshot.ini
 
 ln -sfvn $PWD/polybar $HOME/.config/polybar
 
