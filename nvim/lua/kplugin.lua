@@ -55,6 +55,16 @@ local plugins = {
 
             require("nvim-tree").setup({
                 git = { ignore = false },
+                diagnostics = {
+                    enable = true,
+                    show_on_dirs = true,
+                    icons = {
+                        hint = "H",
+                        info = "I",
+                        warning = "W",
+                        error = "E",
+                    },
+                },
                 renderer = {
                     special_files = {},
                     icons = {
