@@ -55,6 +55,18 @@ local plugins = {
                 vim.cmd(":NvimTreeToggle")
             end, {})
 
+            vim.api.nvim_create_autocmd("VimEnter", {
+                callback = function(data)
+                    local has_name = data.file ~= "" or vim.bo[data.buf].buftype ~= ""
+                    if has_name then
+                        return
+                    end
+
+                    require("nvim-tree.api").tree.toggle({ focus = false, find_file = true })
+                end,
+            })
+
+
             require("nvim-tree").setup({
                 git = { ignore = false },
                 diagnostics = {
