@@ -109,8 +109,8 @@ local plugins = {
     {
         repo = "easymotion/vim-easymotion",
         setup = function()
-            vim.api.nvim_set_keymap("n", "ss", "<Plug>(easymotion-s2", {})
         end
+            vim.api.nvim_set_keymap("n", "ss", "<Plug>(easymotion-s2)", {})
     },
     {
         repo = "junegunn/fzf.vim",
