@@ -36,13 +36,15 @@ local plugins = {
     {
         repo = "lewis6991/gitsigns.nvim",
         setup = function()
-            require('gitsigns').setup()
             vim.api.nvim_create_user_command(
                 "Blame",
                 function() vim.cmd("Gitsigns toggle_current_line_blame") end,
                 {}
             )
         end
+            require("gitsigns").setup({
+                signs = { delete = { text = "┃" } },
+            })
     },
 
     "kyazdani42/nvim-web-devicons",
