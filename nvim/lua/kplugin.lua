@@ -3,7 +3,7 @@ local uv = vim.loop
 local unnamed_path = vim.env.HOME .. "/.config/nvim/unnamed"
 local stat, err = uv.fs_stat(unnamed_path)
 if stat == nil then
-    print("installing unnamed")
+    vim.notify("installing unnamed")
     vim.fn.system("git clone https://github.com/approvers/unnamed.git " .. unnamed_path)
 end
 
@@ -17,6 +17,16 @@ local plugins = {
         end,
     },
     {
+        repo = "rcarriga/nvim-notify",
+        imm_setup = function()
+            local notify = require("notify")
+            notify.setup({
+                background_colour = "#002b36",
+                render = "compact",
+                stages = "fade",
+            })
+            vim.notify = notify
+        end,
     },
     {
         repo = "nvim-lualine/lualine.nvim",

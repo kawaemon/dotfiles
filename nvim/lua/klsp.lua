@@ -35,7 +35,7 @@ M.setup = function()
                 if opts.additional_msg then
                     attach_msg = attach_msg .. " " .. opts.additional_msg
                 end
-                print(attach_msg)
+                vim.notify(attach_msg)
 
                 if opts.on_attach then
                     opts.on_attach()

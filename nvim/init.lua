@@ -1,5 +1,6 @@
 vim.opt.fileencodings = "utf-8,cp932,sjis"
 vim.opt.lazyredraw = true
+vim.opt.termguicolors = true
 vim.loader.enable()
 
 require("kplugin")
@@ -24,7 +25,6 @@ vim.opt.autoindent = true
 vim.opt.cursorline = true
 vim.opt.updatetime = 300
 vim.opt.signcolumn = "yes"
-vim.opt.termguicolors = true
 
 vim.opt.mouse = "a"
 vim.opt.clipboard = "unnamedplus"
