@@ -17,16 +17,15 @@ local plugins = {
         end
     },
     {
-        repo = "kdheepak/tabline.nvim",
-        setup = function()
-            require('tabline').setup({ enable = true })
-        end
     },
     {
         repo = "nvim-lualine/lualine.nvim",
         setup = function()
-            require('lualine').setup({ theme = 'solarized_dark' })
-        end
+            require("lualine").setup({
+                options = { theme = "solarized_dark" },
+                tabline = { lualine_a = { "buffers" } },
+            })
+        end,
     },
     {
         repo = "kdheepak/lazygit.nvim",
