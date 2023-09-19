@@ -12,9 +12,9 @@ vim.opt.runtimepath:prepend(unnamed_path)
 local plugins = {
     {
         repo = "ishan9299/nvim-solarized-lua",
-        setup = function()
+        imm_setup = function()
             vim.cmd("colorscheme solarized-flat")
-        end
+        end,
     },
     {
     },
@@ -48,8 +48,10 @@ local plugins = {
     "kyazdani42/nvim-web-devicons",
     {
         repo = "kyazdani42/nvim-tree.lua",
-        setup = function()
-            vim.api.nvim_create_user_command("Tree", function() vim.cmd(":NvimTreeToggle") end, {})
+        imm_setup = function()
+            vim.api.nvim_create_user_command("Tree", function()
+                vim.cmd(":NvimTreeToggle")
+            end, {})
 
             require("nvim-tree").setup({
                 git = { ignore = false },
