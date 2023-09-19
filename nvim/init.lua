@@ -1,5 +1,6 @@
 vim.opt.fileencodings = "utf-8,cp932,sjis"
 vim.opt.lazyredraw = true
+vim.loader.enable()
 
 require("kplugin")
 
