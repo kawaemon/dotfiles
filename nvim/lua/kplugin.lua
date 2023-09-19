@@ -96,8 +96,13 @@ local plugins = {
     {
         repo = "lukas-reineke/indent-blankline.nvim",
         setup = function()
-            require('indent_blankline').setup({
-                show_current_context = true,
+            vim.cmd("highlight IndentBlanklineIndent1 guifg=#46595e gui=nocombine")
+
+            require("indent_blankline").setup({
+                space_char_blankline = " ",
+                char_highlight_list = {
+                    "IndentBlanklineIndent1",
+                },
             })
         end
     },
