@@ -13,12 +13,6 @@ local unnamed = require("unnamed")
 
 local plugins = {
     {
-        repo = "kyazdani42/nvim-web-devicons",
-        setup = function()
-            require('nvim-web-devicons').setup()
-        end
-    },
-    {
         repo = "ishan9299/nvim-solarized-lua",
         setup = function()
             vim.cmd("colorscheme solarized-flat")
@@ -53,6 +47,8 @@ local plugins = {
             )
         end
     },
+
+    "kyazdani42/nvim-web-devicons",
     {
         repo = "kyazdani42/nvim-tree.lua",
         setup = function()
