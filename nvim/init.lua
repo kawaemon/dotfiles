@@ -11,7 +11,7 @@ vim.opt.expandtab = true
 vim.opt.list = true
 vim.opt.listchars = {
     tab = "> ",
-    trail = "!"
+    trail = "!",
 }
 
 vim.opt.wrap = false
@@ -81,27 +81,32 @@ vim.cmd([[
 
 vim.api.nvim_create_autocmd("StdinReadPost", {
     pattern = "*",
-    callback = function() vim.opt.modified = false end,
+    callback = function()
+        vim.opt.modified = false
+    end,
 })
 
 vim.api.nvim_create_autocmd("FocusLost", {
     pattern = "*",
-    command = "silent! wa"
+    command = "silent! wa",
 })
 
 local kft = require("kft")
 
 vim.api.nvim_create_autocmd("Filetype", {
     pattern = "*",
-    callback = function() kft.on_ft(vim.bo.filetype) end,
+    callback = function()
+        kft.on_ft(vim.bo.filetype)
+    end,
 })
 
 local function def_alias(name, cmd)
-    vim.api.nvim_create_user_command(name, function() vim.cmd(cmd) end, {})
+    vim.api.nvim_create_user_command(name, function()
+        vim.cmd(cmd)
+    end, {})
 end
 
 def_alias("W", "w")
 def_alias("Wq", "wq")
 def_alias("WQ", "wq")
 def_alias("Q", "q")
-

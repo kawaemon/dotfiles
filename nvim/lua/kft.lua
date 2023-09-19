@@ -1,7 +1,11 @@
 local M = {}
 
-local noexpandtab = function() vim.bo.expandtab = false end
-local two_spaces = function() vim.bo.shiftwidth = 2 end
+local noexpandtab = function()
+    vim.bo.expandtab = false
+end
+local two_spaces = function()
+    vim.bo.shiftwidth = 2
+end
 
 local handlers = {
     go = noexpandtab,

@@ -30,21 +30,21 @@ local plugins = {
     {
         repo = "kdheepak/lazygit.nvim",
         setup = function()
-            vim.api.nvim_create_user_command("Lg", function() vim.cmd(":LazyGit") end, {})
-        end
+            vim.api.nvim_create_user_command("Lg", function()
+                vim.cmd(":LazyGit")
+            end, {})
+        end,
     },
     {
         repo = "lewis6991/gitsigns.nvim",
         setup = function()
-            vim.api.nvim_create_user_command(
-                "Blame",
-                function() vim.cmd("Gitsigns toggle_current_line_blame") end,
-                {}
-            )
-        end
             require("gitsigns").setup({
                 signs = { delete = { text = "┃" } },
             })
+            vim.api.nvim_create_user_command("Blame", function()
+                vim.cmd("Gitsigns toggle_current_line_blame")
+            end, {})
+        end,
     },
 
     "kyazdani42/nvim-web-devicons",
@@ -118,15 +118,15 @@ local plugins = {
                                 untracked = "󰐕",
                                 deleted = "",
                                 ignored = "",
-                            }
-                        }
-                    }
+                            },
+                        },
+                    },
                 },
                 on_attach = function(bufnr)
                     require("nvim-tree.api").config.mappings.default_on_attach(bufnr)
                 end,
             })
-        end
+        end,
     },
     {
         repo = "lukas-reineke/indent-blankline.nvim",
@@ -139,23 +139,21 @@ local plugins = {
                     "IndentBlanklineIndent1",
                 },
             })
-        end
+        end,
     },
     {
         repo = "easymotion/vim-easymotion",
         setup = function()
-        end
             vim.api.nvim_set_keymap("n", "ss", "<Plug>(easymotion-s2)", {})
+        end,
     },
     {
         repo = "junegunn/fzf.vim",
         setup = function()
-            vim.api.nvim_create_user_command(
-                "F",
-                function() vim.cmd("Files") end,
-                {}
-            )
-        end
+            vim.api.nvim_create_user_command("F", function()
+                vim.cmd("Files")
+            end, {})
+        end,
     },
 
     -- #### tree-sitter ####
@@ -176,7 +174,7 @@ local plugins = {
                 autotag = { enable = true },
                 playground = { enable = true },
             })
-        end
+        end,
     },
 
     "hrsh7th/cmp-path",
@@ -192,18 +190,16 @@ local plugins = {
     {
         repo = "folke/trouble.nvim",
         setup = function()
-            require('trouble').setup()
-        end
+            require("trouble").setup()
+        end,
     },
 
     {
         repo = "hrsh7th/nvim-cmp",
         setup = function()
-            vim.api.nvim_create_user_command(
-                "Lsp",
-                function() require("klsp").setup() end,
-                {}
-            )
+            vim.api.nvim_create_user_command("Lsp", function()
+                require("klsp").setup()
+            end, {})
 
             vim.opt.completeopt = { "menu", "menuone", "noselect", "noinsert" }
             vim.diagnostic.config({ virtual_text = false })
@@ -213,12 +209,14 @@ local plugins = {
 
             cmp.setup({
                 snippet = {
-                    expand = function(s) luasnip.lsp_expand(s.body) end
+                    expand = function(s)
+                        luasnip.lsp_expand(s.body)
+                    end,
                 },
 
                 sources = cmp.config.sources({
                     { name = "nvim_lsp" },
-                    { name = "luasnip" }
+                    { name = "luasnip" },
                 }, {
                     { name = "buffer" },
                     { name = "path" },
@@ -227,7 +225,7 @@ local plugins = {
                 mapping = {
                     ["<Tab>"] = cmp.mapping(cmp.mapping.select_next_item(), { "i", "s" }),
                     ["<S-Tab>"] = cmp.mapping(cmp.mapping.select_prev_item(), { "i", "s" }),
-                    ["<C-Space>"] = cmp.mapping(cmp.mapping.complete(), { 'i', 'c' }),
+                    ["<C-Space>"] = cmp.mapping(cmp.mapping.complete(), { "i", "c" }),
                     ["<CR>"] = cmp.mapping.confirm({ select = false }),
                 },
 
@@ -238,11 +236,11 @@ local plugins = {
 
             cmp.setup.cmdline("/", { sources = { { name = "buffer" } } })
             cmp.setup.cmdline(":", { sources = { { name = "cmdline" }, { name = "path" } } })
-        end
-    }
+        end,
+    },
 }
 
 require("unnamed").setup({
     workdir = unnamed_path,
-    repos = plugins
+    repos = plugins,
 })
