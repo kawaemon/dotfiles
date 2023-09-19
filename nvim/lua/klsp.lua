@@ -9,7 +9,7 @@ M.setup = function()
         }
     )
 
-    vim.api.nvim_set_keymap("n", "K", '<Cmd>lua require("klsp").hover()<CR>', { noremap = true, silent = true })
+    vim.api.nvim_set_keymap("n", "<C-k>", '<Cmd>lua require("klsp").hover()<CR>', { noremap = true, silent = true })
 
     local function alias(key, f)
         vim.api.nvim_create_user_command("Rename", function()
