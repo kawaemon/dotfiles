@@ -11,11 +11,17 @@ M.setup = function()
 
     vim.api.nvim_set_keymap("n", "K", '<Cmd>lua require("klsp").hover()<CR>', { noremap = true, silent = true })
 
-    vim.api.nvim_create_user_command("Rename", vim.lsp.buf.rename, {})
-    vim.api.nvim_create_user_command("CodeAction", vim.lsp.buf.code_action, {})
-    vim.api.nvim_create_user_command("Definition",  vim.lsp.buf.definition, {})
-    vim.api.nvim_create_user_command("References", vim.lsp.buf.references, {})
-    vim.api.nvim_create_user_command("Implementation", vim.lsp.buf.implementation, {})
+    local function alias(key, f)
+        vim.api.nvim_create_user_command("Rename", function()
+            f()
+        end, {})
+    end
+
+    alias("Rename", vim.lsp.buf.rename)
+    alias("CodeAction", vim.lsp.buf.code_action)
+    alias("Definition", vim.lsp.buf.definition)
+    alias("References", vim.lsp.buf.references)
+    alias("Implementation", vim.lsp.buf.implementation)
 
     local cmp = require("cmp")
     local lspconfig = require("lspconfig")
