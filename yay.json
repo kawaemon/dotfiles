@@ -17,5 +17,6 @@
 	"editmenu": true,
 	"combinedupgrade": false,
 	"useask": false,
-	"batchinstall": false
+	"batchinstall": false,
+	"newinstallengine": true
 }
