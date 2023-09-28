@@ -6,7 +6,7 @@ M.setup = function()
     vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, { focusable = false })
 
     vim.api.nvim_set_keymap("n", "<C-k>", '<Cmd>lua require("klsp").hover()<CR>', { noremap = true, silent = true })
-    vim.api.nvim_set_keymap("n", "<C-m>", '<Cmd>lua vim.lsp.buf.code_action()<CR>', { noremap = true, silent = true })
+    vim.api.nvim_set_keymap("n", "<C-m>", "<Cmd>lua vim.lsp.buf.code_action()<CR>", { noremap = true, silent = true })
 
     local function alias(key, f)
         vim.api.nvim_create_user_command(key, function()

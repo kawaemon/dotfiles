@@ -33,7 +33,16 @@ local plugins = {
         setup = function()
             require("lualine").setup({
                 options = { theme = "solarized_dark" },
-                tabline = { lualine_a = { "buffers" } },
+                tabline = {
+                    lualine_a = {
+                        {
+                            "buffers",
+                            max_length = function()
+                                return vim.o.columns
+                            end,
+                        },
+                    },
+                },
             })
         end,
     },
