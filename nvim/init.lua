@@ -107,6 +107,10 @@ local function def_alias(name, cmd)
 end
 
 def_alias("W", "w")
+def_alias("Wa", "wa")
 def_alias("Wq", "wq")
+def_alias("Wqa", "wqa")
 def_alias("WQ", "wq")
+
 def_alias("Q", "q")
+def_alias("Qa", "qa")
