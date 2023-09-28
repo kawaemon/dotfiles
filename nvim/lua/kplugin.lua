@@ -109,6 +109,7 @@ local plugins = {
 
             require("nvim-tree").setup({
                 git = { ignore = false },
+                update_focused_file = { enable = true, },
                 diagnostics = {
                     enable = true,
                     show_on_dirs = true,
