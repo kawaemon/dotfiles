@@ -143,7 +143,23 @@ local plugins = {
                     },
                 },
                 on_attach = function(bufnr)
-                    require("nvim-tree.api").config.mappings.default_on_attach(bufnr)
+                    local api = require("nvim-tree.api")
+                    local function opts(desc)
+                        return { desc = "nvim-tree: " .. desc, buffer = bufnr, noremap = true, silent = true, nowait = true }
+                    end
+                    local mappings = {
+                        ["<CR>"] = { api.node.open.edit, "Open" },
+                        ["a"] = { api.fs.create, "Create" },
+                        ["d"] = { api.fs.remove, "Delete" },
+                        ["p"] = { api.fs.paste, "Paste" },
+                        ["r"] = { api.fs.rename, "Rename" },
+                        ["x"] = { api.fs.cut, "Cut" },
+                        ["y"] = { api.fs.copy.node, "Copy" },
+                        ["<2-LeftMouse>"] = { api.node.open.edit, "Open" },
+                    }
+                    for keys, mapping in pairs(mappings) do
+                        vim.keymap.set("n", keys, mapping[1], opts(mapping[2]))
+                    end
                 end,
             })
         end,
