@@ -107,6 +107,8 @@ local plugins = {
                 end,
             })
 
+            vim.cmd("highlight NvimTreeIndentMarker guifg=#46595e gui=nocombine")
+
             require("nvim-tree").setup({
                 git = { ignore = false },
                 update_focused_file = { enable = true, },
@@ -121,11 +123,25 @@ local plugins = {
                     },
                 },
                 renderer = {
+                    highlight_diagnostics = true,
                     special_files = {},
+                    indent_width = 1,
+                    indent_markers = {
+                        enable = true,
+                        inline_arrows = false,
+                        icons = {
+                          corner = "│",
+                          edge = "│",
+                          item = "│",
+                          bottom = "",
+                          none = " ",
+                        }
+                    },
                     icons = {
+                        git_placement = "signcolumn",
                         show = {
                             git = true,
-                            file = false,
+                            file = true,
                             folder = true,
                             folder_arrow = true,
                         },
