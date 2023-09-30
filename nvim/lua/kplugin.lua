@@ -238,7 +238,11 @@ local plugins = {
             end, {})
 
             vim.opt.completeopt = { "menu", "menuone", "noselect", "noinsert" }
-            vim.diagnostic.config({ virtual_text = false })
+            vim.diagnostic.config({
+                virtual_text = {
+                    prefix = "",
+                },
+            })
 
             local cmp = require("cmp")
             local luasnip = require("luasnip")
