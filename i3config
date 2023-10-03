@@ -15,7 +15,6 @@ exec --no-startup-id xfce4-power-manager
 exec --no-startup-id ~/.fehbg
 exec --no-startup-id gnome-keyring-daemon --start --components=ssh,secrets,pkcs11
 exec --no-startup-id blueman-applet
-exec --no-startup-id ~/.local/bin/capslock.sh
 exec --no-startup-id /usr/lib/xfce-polkit/xfce-polkit
 
 # Use pactl to adjust volume in PulseAudio.

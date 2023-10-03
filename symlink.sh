@@ -34,6 +34,3 @@ ln -sfv $PWD/lazygit.yml $HOME/.config/lazygit/config.yml
 
 mkdir -p $HOME/.cargo/
 ln -sfv $PWD/cargo.toml $HOME/.cargo/config.toml
-
-mkdir -p $HOME/.local/bin
-ln -sfv $PWD/capslock.sh $HOME/.local/bin/capslock.sh
