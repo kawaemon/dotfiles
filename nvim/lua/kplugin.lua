@@ -183,14 +183,8 @@ local plugins = {
     {
         repo = "lukas-reineke/indent-blankline.nvim",
         setup = function()
-            vim.cmd("highlight IndentBlanklineIndent1 guifg=#46595e gui=nocombine")
-
-            require("indent_blankline").setup({
-                space_char_blankline = " ",
-                char_highlight_list = {
-                    "IndentBlanklineIndent1",
-                },
-            })
+            local ibl = require("ibl")
+            ibl.setup({ scope = { enabled = false } })
         end,
     },
     {
