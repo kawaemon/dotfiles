@@ -18,6 +18,7 @@ ln -sfv $PWD/sqliterc $HOME/.sqliterc
 mkdir -p $HOME/.config/alacritty/
 ln -sfv $PWD/alacritty.yml $HOME/.config/alacritty/alacritty.yml
 ln -sfv $PWD/starship.toml $HOME/.config/starship.toml
+ln -sfv $PWD/chromium-flags.conf $HOME/.config/chromium-flags.conf
 
 mkdir -p $HOME/.config/i3/
 ln -sfv $PWD/i3config $HOME/.config/i3/config
