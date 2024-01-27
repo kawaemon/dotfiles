@@ -65,4 +65,4 @@ source ~/.zr.zsh
 # automatically called by .zr.zsh
 # autoload -U compinit && compinit
 
-eval $(starship init zsh)
+eval "$(starship init zsh)"
