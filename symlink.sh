@@ -16,7 +16,7 @@ ln -sfv $PWD/rc.zsh $HOME/.zshrc.shared
 ln -sfv $PWD/sqliterc $HOME/.sqliterc
 
 mkdir -p $HOME/.config/alacritty/
-ln -sfv $PWD/alacritty.yml $HOME/.config/alacritty/alacritty.yml
+ln -sfv $PWD/alacritty.toml $HOME/.config/alacritty/alacritty.toml
 ln -sfv $PWD/starship.toml $HOME/.config/starship.toml
 ln -sfv $PWD/chromium-flags.conf $HOME/.config/chromium-flags.conf
 
