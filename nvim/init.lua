@@ -25,6 +25,7 @@ vim.opt.autoindent = true
 vim.opt.cursorline = true
 vim.opt.updatetime = 300
 vim.opt.signcolumn = "yes"
+vim.opt.smoothscroll = true
 
 vim.opt.mouse = "a"
 vim.opt.clipboard = "unnamedplus"
