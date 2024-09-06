@@ -1,6 +1,4 @@
 vim.opt.fileencodings = "utf-8,cp932,sjis"
-vim.opt.lazyredraw = true
-vim.opt.termguicolors = true
 vim.loader.enable()
 
 require("kplugin")
@@ -26,6 +24,7 @@ vim.opt.cursorline = true
 vim.opt.updatetime = 300
 vim.opt.signcolumn = "yes"
 vim.opt.smoothscroll = true
+vim.opt.showmode = false
 
 vim.opt.mouse = "a"
 vim.opt.clipboard = "unnamedplus"
@@ -90,15 +89,6 @@ vim.api.nvim_create_autocmd("StdinReadPost", {
 vim.api.nvim_create_autocmd("FocusLost", {
     pattern = "*",
     command = "silent! wa",
-})
-
-local kft = require("kft")
-
-vim.api.nvim_create_autocmd("Filetype", {
-    pattern = "*",
-    callback = function()
-        kft.on_ft(vim.bo.filetype)
-    end,
 })
 
 local function def_alias(name, cmd)
