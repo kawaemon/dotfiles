@@ -17,16 +17,6 @@ local plugins = {
         end,
     },
     {
-        repo = "rcarriga/nvim-notify",
-        imm_setup = function()
-            local notify = require("notify")
-            notify.setup({
-                background_colour = "#002b36",
-                render = "compact",
-                stages = "fade",
-            })
-            vim.notify = notify
-        end,
     },
     {
         repo = "nvim-lualine/lualine.nvim",
