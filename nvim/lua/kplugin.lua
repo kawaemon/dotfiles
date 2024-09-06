@@ -12,7 +12,7 @@ vim.opt.runtimepath:prepend(unnamed_path)
 local plugins = {
     {
         repo = "ishan9299/nvim-solarized-lua",
-        imm_setup = function()
+        fast_setup = function()
             vim.cmd("colorscheme solarized-flat")
         end,
     },
@@ -63,7 +63,7 @@ local plugins = {
     "kyazdani42/nvim-web-devicons",
     {
         repo = "kyazdani42/nvim-tree.lua",
-        imm_setup = function()
+        fast_setup = function()
             vim.api.nvim_create_user_command("Tree", function()
                 vim.cmd(":NvimTreeToggle")
             end, {})
@@ -177,8 +177,7 @@ local plugins = {
     {
         repo = "lukas-reineke/indent-blankline.nvim",
         setup = function()
-            local ibl = require("ibl")
-            ibl.setup({ scope = { enabled = false } })
+            require("ibl").setup({ scope = { enabled = false } })
         end,
     },
     {
