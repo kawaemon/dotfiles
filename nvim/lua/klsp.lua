@@ -59,7 +59,7 @@ M.setup = function()
     })
 
     init_lsp("gopls", {
-        cmd = { "gopls", "serve", "--debug=localhost:6060" },
+        cmd = { "/usr/bin/gopls", "serve", "--debug=localhost:6060" },
         additional_msg = "debugging is available at localhost:6060",
         settings = {
             ["gopls"] = { staticcheck = true },
