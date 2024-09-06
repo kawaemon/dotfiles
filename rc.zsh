@@ -63,6 +63,8 @@ fi
 
 source ~/.zr.zsh
 
+eval "$(mise activate zsh)"
+
 # automatically called by .zr.zsh
 # autoload -U compinit && compinit
 
