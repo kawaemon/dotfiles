@@ -1,7 +1,3 @@
-if [[ -z "${TMUX}" ]]; then
-    tmux
-fi
-
 alias ls=exa
 alias cat=bat
 
@@ -71,3 +67,6 @@ source ~/.zr.zsh
 # autoload -U compinit && compinit
 
 eval "$(starship init zsh)"
+if [[ -z "${TMUX}" ]]; then
+    tmux
+fi
