@@ -52,6 +52,10 @@ export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
 export NODE_OPTIONS="--stack-trace-limit=1000"
 gpgconf --launch gpg-agent
 
+if [[ ! -d ~/.tmux/plugins/tpm ]]; then
+    git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+fi
+
 if [[ ! -f ~/.zr.zsh ]] || [[ ~/.zshrc.shared -nt ~/.zr.zsh ]]; then
     zr kawaemon/zsh-vi-mode \
        zsh-users/zsh-autosuggestions \
