@@ -17,6 +17,10 @@ local plugins = {
         end,
     },
     {
+        repo = "Darazaki/indent-o-matic",
+        fast_setup = function()
+            require('indent-o-matic').setup({})
+        end
     },
     {
         repo = "nvim-lualine/lualine.nvim",
