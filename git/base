@@ -23,6 +23,7 @@
     s = status
     p = push
     c = commit
+    rc = !git commit --allow-empty -m 'root commit'
     ch = checkout
     b = branch
 
