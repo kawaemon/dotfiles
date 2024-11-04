@@ -214,18 +214,21 @@ local plugins = {
     {
         repo = "nvim-treesitter/nvim-treesitter",
         setup = function()
-            vim.cmd([[
-                hi! clear TSError
-                hi TSError gui=underline guifg=#dc322f
-            ]])
-
+            local parser_path = "~/.cache/nvim/tree-sitter-parsers"
+            vim.opt.runtimepath:prepend(parser_path)
             require("nvim-treesitter.configs").setup({
+                parser_install_dir = parser_path,
                 ensure_installed = "all",
                 highlight = { enable = true },
                 indent = { enable = true },
                 autotag = { enable = true },
                 playground = { enable = true },
             })
+
+            vim.cmd([[
+                hi! clear TSError
+                hi TSError gui=underline guifg=#dc322f
+            ]])
         end,
     },
 
