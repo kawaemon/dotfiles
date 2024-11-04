@@ -14,6 +14,7 @@ local plugins = {
         repo = "ishan9299/nvim-solarized-lua",
         fast_setup = function()
             vim.cmd("colorscheme solarized-flat")
+            vim.cmd("hi! link @variable normal")
         end,
     },
     {
