@@ -69,6 +69,11 @@ eval "$(mise activate zsh)"
 # autoload -U compinit && compinit
 
 eval "$(starship init zsh)"
+
+if [ -e $XDG_RUNTIME_DIR/docker.sock ]; then
+    export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock
+fi
+
 if [[ -z "${TMUX}" ]]; then
     tmux
 fi

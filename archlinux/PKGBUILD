@@ -1,0 +1,120 @@
+pkgbase=kawak
+pkgname=(kawak-base kawak-x)
+pkgdesc=
+pkgver=1
+pkgrel=1
+arch=('x86_64')
+source=(
+    zram-generator.conf
+    10-allow-wheel.conf
+    99-vm-zram-parameters.conf
+    99-disable-zswap.conf
+
+    10-disable-capslock.conf
+    20-ime.sh
+    20-gtk-theme.sh
+)
+sha256sums=(
+    "SKIP"
+    "SKIP"
+    "SKIP"
+    "SKIP"
+
+    "SKIP"
+    "SKIP"
+    "SKIP"
+)
+
+package_kawak-base() {
+    depends=(
+        act
+        arp-scan
+        bat
+        btrfs-progs
+        clang
+        docker
+        docker-compose
+        docker-buildx
+        docker-compose
+        docker-rootless-extras
+        dosfstools
+        exa
+        fd
+        fzf
+        gdisk
+        ghq
+        git-delta
+        htop
+        i7z
+        jq
+        lazygit
+        man-db
+        mise
+        mold
+        neovim
+        p7zip
+        poetry
+        pyright
+        ripgrep
+        rustup
+        sccache
+        starship
+        tmux
+        traceroute
+        vim
+        wget
+        zsh
+    )
+
+    install -Dm 644 "${srcdir}"/zram-generator.conf -t "${pkgdir}"/etc/systemd/
+    install -Dm 644 "${srcdir}"/10-allow-wheel.conf -t "${pkgdir}"/etc/sudoers.d/
+    install -Dm 644 "${srcdir}"/99-vm-zram-parameters.conf -t "${pkgdir}"/etc/sysctl.d/
+    install -Dm 644 "${srcdir}"/99-disable-zswap.conf -t "${pkgdir}"/etc/modprobe.d/
+}
+
+package_kawak-x() {
+    depends=(
+        alacritty
+        audacity
+        blueman
+        bluez
+        bluez-utils
+        chromium
+        fcitx5-configtool
+        fcitx5-gtk
+        fcitx5-lua
+        fcitx5-mozc-ut
+        fcitx5-qt
+        firefox-developer-edition
+        flameshot
+        gedit
+        gimp
+        gvfs
+        gnome-keyring
+        helvum
+        insomnia-bin
+        libreoffice-fresh
+        mozc-ut
+        network-manager-applet
+        noto-fonts
+        noto-fonts-cjk
+        noto-fonts-emoji
+        noto-fonts-extra
+        pavucontrol
+        pipewire
+        pipewire-alsa
+        pipewire-jack
+        pipewire-pulse
+        plata-theme-bin
+        thunar
+        ttf-jetbrains-mono-nerd
+        visual-studio-code-bin
+        vlc
+        yt-dlp
+        xorg-server
+    )
+
+    install -Dm 644 "${srcdir}"/10-disable-capslock.conf -t "${pkgdir}"/etc/X11/xorg.conf.d/
+    install -Dm 644 "${srcdir}"/20-ime.sh -t "${pkgdir}"/etc/profile.d/
+    install -Dm 644 "${srcdir}"/20-gtk-theme.sh -t "${pkgdir}"/etc/profile.d/
+}

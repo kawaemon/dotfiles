@@ -30,11 +30,17 @@ ln -sfvn $PWD/polybar $HOME/.config/polybar
 mkdir -p $HOME/.config/yay/
 ln -sfv $PWD/yay.json $HOME/.config/yay/config.json
 
+mkdir -p $HOME/.config/pacman/
+ln -sfv $PWD/makepkg.conf $HOME/.config/pacman/makepkg.conf
+
 mkdir -p $HOME/.config/lazygit/
 ln -sfv $PWD/lazygit.yml $HOME/.config/lazygit/config.yml
 
 mkdir -p $HOME/.config/pypoetry/
 ln -sfv $PWD/poetry.toml $HOME/.config/pypoetry/config.toml
+
+mkdir -p $HOME/.cargo/
+ln -sfv $PWD/cargo.toml $HOME/.cargo/config.toml
 
 mkdir -p $HOME/.cargo/
 ln -sfv $PWD/cargo.toml $HOME/.cargo/config.toml
