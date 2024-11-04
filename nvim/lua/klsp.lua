@@ -88,6 +88,36 @@ M.setup = function()
         },
     })
 
+    local function get_client_name(client_id)
+        local clients = vim.lsp.get_active_clients()
+
+        for _, client in ipairs(clients) do
+            if client.id == client_id then
+                return client.name
+            end
+        end
+
+        return nil
+    end
+
+    -- https://www.mitchellhanberg.com/modern-format-on-save-in-neovim/
+    vim.api.nvim_create_autocmd("LspAttach", {
+        group = vim.api.nvim_create_augroup("lsp", { clear = true }),
+        callback = function(args)
+            name = get_client_name(args.data.client_id)
+            if name == "pyright" then
+                return
+            end
+
+            vim.api.nvim_create_autocmd("BufWritePre", {
+              buffer = args.buf,
+              callback = function()
+                  vim.lsp.buf.format({ async = false, id = args.data.client_id })
+              end,
+            })
+        end
+    })
+
     vim.cmd("LspStart")
 end
 
