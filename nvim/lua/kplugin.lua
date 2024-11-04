@@ -18,6 +18,18 @@ local plugins = {
         end,
     },
     {
+        repo = "j-hui/fidget.nvim",
+        setup = function()
+            require("fidget").setup({
+                notification = {
+                    override_vim_notify = true,
+                    view = { stack_upwards = false },
+                    window = { winblend = 0 },
+                },
+            })
+        end
+    },
+    {
         repo = "Darazaki/indent-o-matic",
         fast_setup = function()
             require('indent-o-matic').setup({})
