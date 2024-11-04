@@ -9,9 +9,7 @@ M.setup = function()
     vim.api.nvim_set_keymap("n", "<C-m>", "<Cmd>lua vim.lsp.buf.code_action()<CR>", { noremap = true, silent = true })
 
     local function alias(key, f)
-        vim.api.nvim_create_user_command(key, function()
-            f()
-        end, {})
+        vim.api.nvim_create_user_command(key, f, {})
     end
 
     alias("Rename", vim.lsp.buf.rename)
@@ -19,6 +17,15 @@ M.setup = function()
     alias("Definition", vim.lsp.buf.definition)
     alias("References", vim.lsp.buf.references)
     alias("Implementation", vim.lsp.buf.implementation)
+
+    -- setup python venv
+    -- https://zenn.dev/misora/articles/d0e8c244f2f4db
+    local venv_path = vim.fn.getcwd() .. '/.venv'
+    if vim.fn.isdirectory(venv_path) == 1 then
+        vim.env.VIRTUAL_ENV = venv_path
+        vim.env.PATH = venv_path .. '/bin:' .. vim.env.PATH
+        vim.notify("lsp: venv found, appending to PATH")
+    end
 
     local lspconfig = require("lspconfig")
     local cmp = require("cmp")
@@ -45,7 +52,22 @@ M.setup = function()
         })
     end
 
-    init_lsp("tsserver", {})
+    -- https://github.com/astral-sh/ruff-lsp/issues/384#issuecomment-1941556771
+    init_lsp("pyright", {
+        settings = {
+            pyright = {
+                disableOrganizeImports = true, -- Using Ruff
+            },
+            python = {
+                analysis = {
+                    ignore = { '*' }, -- Using Ruff
+                    typeCheckingMode = 'off', -- Using mypy
+                },
+            },
+        }
+    })
+    init_lsp("ruff", {})
+    init_lsp("ts_ls", {})
     init_lsp("clangd", {})
 
     init_lsp("rust_analyzer", {
