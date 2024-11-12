@@ -32,6 +32,7 @@ package_kawak-base() {
         bat
         btrfs-progs
         clang
+        compsize
         docker
         docker-compose
         docker-buildx
@@ -58,6 +59,7 @@ package_kawak-base() {
         ripgrep
         rustup
         sccache
+        smartmontools
         starship
         tmux
         traceroute

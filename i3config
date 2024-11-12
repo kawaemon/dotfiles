@@ -6,6 +6,7 @@ font pango:JetBrainsMono Nerd Font Mono 8
 
 exec_always --no-startup-id $HOME/.config/polybar/launch.sh
 
+exec --no-startup-id xset r rate 250 30
 exec --no-startup-id dex --autostart --environment i3
 exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork
 exec --no-startup-id nm-applet
@@ -47,9 +48,9 @@ smart_borders on
 default_border pixel 2
 gaps inner 5
 
-set $sol_black #073642
+set $sol_black #1d1d1d
 set $sol_red #dc322f
-set $sol_green #859900
+set $sol_green #7986cb
 set $sol_yellow #b58900
 set $sol_blue #268bd2
 set $sol_magenta #d33682
