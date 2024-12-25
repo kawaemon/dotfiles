@@ -50,8 +50,10 @@ package_kawak-base() {
         jq
         lazygit
         man-db
+        man-pages
         mise
         mold
+        ncdu
         neovim
         p7zip
         poetry
