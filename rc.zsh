@@ -14,6 +14,13 @@ alias npm='corepack npm'
 alias yarn='corepack yarn'
 alias pnpm='corepack pnpm'
 
+function dockerawslogin() {
+    local region=$(aws configure get region)
+    local accountid=$(aws sts get-caller-identity --query Account --output text)
+    aws ecr get-login-password --region $region | \
+        docker login --username AWS --password-stdin $accountid.dkr.ecr.$region.amazonaws.com
+}
+
 setopt nomatch \
        correct \
        automenu \
