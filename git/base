@@ -2,7 +2,6 @@
 
 [core]
     excludesfile = ~/repo/github.com/kawaemon/dotfiles/git/global_gitignore
-    pager = delta
     autocrlf = input
 
 [user]
@@ -55,13 +54,6 @@
 [diff]
     algorithm = histogram
     colorMoved = dimmed-zebra
-
-[delta]
-    syntax-theme = "Solarized (dark)"
-    line-numbers = true
-
-[interactive]
-    diffFilter = delta --color-only
 
 [ghq]
     root = ~/repo
