@@ -26,15 +26,18 @@
     ch = checkout
     b = branch
 
+    bigrepo = !git config core.fsmonitor true && git config core.untrackedCache true
+
     # from https://qiita.com/Yinaura/items/30992f25b87f76af3ba2
     current-branch-name = ! git branch | grep -e '^\\* ' | sed -e 's/^\\* //g'
     force-pull = !git fetch && git reset --hard origin/$(git current-branch-name)
 
 [commit]
     gpgsign = true
+    verbose = true
 
 [merge]
-    conflictStyle = diff3
+    conflictStyle = zdiff3
     tool = nvim
 
 [mergetool.nvim]
@@ -42,11 +45,12 @@
     cmd = nvim -f -d -c '4wincmd w | wincmd J' "$LOCAL" "$REMOTE" "$BASE" "$MERGED"
 
 [rebase]
-    autostash = true
+    autoStash = true
+    updateRefs = true
 
 [pull]
     rebase = true
-    autostash = true
+    autoStash = true
 
 [init]
     defaultBranch = master
@@ -54,10 +58,23 @@
 [diff]
     algorithm = histogram
     colorMoved = dimmed-zebra
-
-[ghq]
-    root = ~/repo
+    mnemonicPrefix = true
+    renames = true
 
 [rerere]
     enabled = true
+    autoupdate = true
 
+[push]
+    autoSetupRemote = true
+
+[fetch]
+    prune = true
+    pruneTags = true
+    all = true
+
+[help]
+    autocorrect = prompt
+
+[ghq]
+    root = ~/repo
