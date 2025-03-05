@@ -21,6 +21,7 @@ function dockerawslogin() {
         docker login --username AWS --password-stdin $accountid.dkr.ecr.$region.amazonaws.com
 }
 
+# man zshoptions
 setopt nomatch \
        correct \
        automenu \
@@ -28,6 +29,17 @@ setopt nomatch \
        extendedglob \
        interactive_comments
 
+export HISTFILE=$HOME/.zshhistory
+export HISTSIZE=100000
+export SAVEHIST=1000000
+setopt hist_ignore_all_dups
+setopt hist_save_no_dups
+setopt hist_ignore_space
+setopt hist_reduce_blanks
+setopt share_history    # share history between all zsh
+setopt nonomatch        # useful when using curl or wget
+
+unsetopt extended_history # add more information on history file
 unsetopt beep
 
 zstyle ':completion:*' menu select=5 # highlight selection in menu
