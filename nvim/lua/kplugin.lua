@@ -37,9 +37,39 @@ local plugins = {
     },
     {
         repo = "nvim-lualine/lualine.nvim",
-        setup = function()
+        fast_setup = function()
+            local theme = require("lualine.themes.solarized_dark")
+
+            local base02 = theme.normal.c.bg
+            local base0 = theme.inactive.a.fg
+
+            theme.normal.a.fg = base0
+            theme.insert.a.fg = theme.insert.a.bg
+            theme.visual.a.fg = theme.visual.a.bg
+            theme.replace.a.fg = theme.replace.a.bg
+
+            theme.normal.a.bg = base02
+            theme.insert.a.bg = base02
+            theme.visual.a.bg = base02
+            theme.replace.a.bg = base02
+
+            theme.normal.a.gui = ''
+            theme.insert.a.gui = ''
+            theme.visual.a.gui = ''
+            theme.replace.a.gui = ''
+
             require("lualine").setup({
-                options = { theme = "solarized_dark" },
+                options = {
+                    theme = theme,
+                    icons_enabled = false,
+                    section_separators = { left = "", right = "" },
+                },
+                sections = {
+                    lualine_a = {{ "mode", fmt = string.lower }},
+                    lualine_b = {},
+                    lualine_y = {},
+                    lualine_z = {},
+                },
                 tabline = {
                     lualine_a = {
                         {
