@@ -63,6 +63,7 @@ export PATH="$HOME/.cabal/bin:$HOME/.ghcup/bin:$PATH"
 
 export GPG_TTY=$(tty)
 export SSH_AUTH_SOCK=$(gpgconf --list-dirs agent-ssh-socket)
+gpg-connect-agent "UPDATESTARTUPTTY" /bye
 
 export NODE_OPTIONS="--stack-trace-limit=1000"
 gpgconf --launch gpg-agent
