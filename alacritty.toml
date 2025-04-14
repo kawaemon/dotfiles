@@ -6,7 +6,7 @@ green = "0x9db500"
 magenta = "0x6c71c4"
 red = "0xcb4b16"
 white = "0xfdf6e3"
-yellow = "0x657b83"
+yellow = "0xb58900"
 
 [colors.normal]
 black = "0x073642"
