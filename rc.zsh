@@ -20,6 +20,11 @@ function dockerawslogin() {
     aws ecr get-login-password --region $region | \
         docker login --username AWS --password-stdin $accountid.dkr.ecr.$region.amazonaws.com
 }
+function tm() {
+    if [[ "$TERM_PROGRAM" != "vscode" && -z "$TMUX" ]]; then
+        tmux new-session -A -s main
+    fi
+}
 
 # man zshoptions
 setopt nomatch \
@@ -85,13 +90,10 @@ if [[ ! -f ~/.zr.zsh ]] || [[ ~/.zshrc.shared -nt ~/.zr.zsh ]]; then
 fi
 
 source ~/.zr.zsh
-
-eval "$(mise activate zsh)"
-
 # automatically called by .zr.zsh
 # autoload -U compinit && compinit
 
+eval "$(mise activate zsh)"
 eval "$(starship init zsh)"
-if [[ -z "${TMUX}" ]]; then
-    tmux
-fi
+
+tm
