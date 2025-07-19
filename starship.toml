@@ -5,3 +5,11 @@ disabled = true
 
 [gcloud]
 disabled = true
+
+[character]
+success_symbol = '>'
+error_symbol = '[>](red)'
+vimcmd_symbol = '[vim cmd](green)'
+vimcmd_replace_one_symbol = '[vim rep1](purple)'
+vimcmd_replace_symbol = '[vim rep](purple)'
+vimcmd_visual_symbol = '[vim vis](yellow)'
