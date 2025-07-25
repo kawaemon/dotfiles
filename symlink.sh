@@ -7,25 +7,26 @@ fi
 
 echo
 
-ln -sfvn $PWD/nvim $HOME/.config/nvim
-
 ln -sfv $PWD/git/base $HOME/.gitconfig
 ln -sfv $PWD/tmux.conf $HOME/.tmux.conf
 ln -sfv $PWD/rc.zsh $HOME/.zshrc.shared
 ln -sfv $PWD/sqliterc $HOME/.sqliterc
 
-mkdir -p $HOME/.config/alacritty/
-ln -sfv $PWD/alacritty.toml $HOME/.config/alacritty/alacritty.toml
+mkdir -p $HOME/.config
+ln -sfvn $PWD/nvim $HOME/.config/nvim
+
 ln -sfv $PWD/starship.toml $HOME/.config/starship.toml
 ln -sfv $PWD/chromium-flags.conf $HOME/.config/chromium-flags.conf
+ln -sfvn $PWD/polybar $HOME/.config/polybar
+
+mkdir -p $HOME/.config/alacritty/
+ln -sfv $PWD/alacritty.toml $HOME/.config/alacritty/alacritty.toml
 
 mkdir -p $HOME/.config/i3/
 ln -sfv $PWD/i3config $HOME/.config/i3/config
 
 mkdir -p $HOME/.config/flameshot/
 ln -sfv $PWD/flameshot.ini $HOME/.config/flameshot/flameshot.ini
-
-ln -sfvn $PWD/polybar $HOME/.config/polybar
 
 mkdir -p $HOME/.config/yay/
 ln -sfv $PWD/yay.json $HOME/.config/yay/config.json
