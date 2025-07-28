@@ -21,7 +21,7 @@ function dockerawslogin() {
 }
 function tm() {
     if [[ "$TERM_PROGRAM" != "vscode" && -z "$TMUX" ]]; then
-        tmux new-session -A -s main
+        tmux
     fi
 }
 
