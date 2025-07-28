@@ -1,5 +1,4 @@
-alias ls=exa
-alias cat=bat
+alias ls='ls -h --color'
 
 alias sl=ls
 alias v=nvim
