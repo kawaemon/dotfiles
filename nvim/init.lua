@@ -70,12 +70,6 @@ vim.api.nvim_set_keymap("n", "sh", ":bp<CR>", mapopt)
 vim.api.nvim_set_keymap("n", "sl", ":bn<CR>", mapopt)
 vim.api.nvim_set_keymap("n", "sd", ":b#|bw#|bp|bn<CR>", mapopt)
 
--- use w{h,j,k,l} to switch between windows
-vim.api.nvim_set_keymap("n", "wh", "<C-w><Left>", mapopt)
-vim.api.nvim_set_keymap("n", "wj", "<C-w><Down>", mapopt)
-vim.api.nvim_set_keymap("n", "wk", "<C-w><Up>", mapopt)
-vim.api.nvim_set_keymap("n", "wl", "<C-w><Right>", mapopt)
-
 -- use esc-esc to remove search highlight
 vim.api.nvim_set_keymap("n", "<Esc><Esc>", ":nohlsearch<CR>", { noremap = true, silent = true })
 
