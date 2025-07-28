@@ -11,13 +11,6 @@ vim.opt.runtimepath:prepend(unnamed_path)
 
 local plugins = {
     {
-        repo = "ishan9299/nvim-solarized-lua",
-        fast_setup = function()
-            vim.cmd("colorscheme solarized-flat")
-            vim.cmd("hi! link @variable normal")
-        end,
-    },
-    {
         repo = "j-hui/fidget.nvim",
         setup = function()
             require("fidget").setup({

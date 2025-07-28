@@ -1,3 +1,4 @@
+-- skips plugin installation
 local lightweight = true
 
 vim.opt.fileencodings = "utf-8,cp932,sjis"
@@ -42,15 +43,8 @@ vim.opt.ignorecase = true
 vim.opt.matchpairs:append({ "<:>" })
 vim.opt.diffopt:append({ "algorithm:histogram" })
 
-if lightweight then
-    -- idk why default theme is a mess
-    vim.cmd("colorscheme quiet")
-else
-    vim.cmd([[
-        highlight Normal guibg=none
-        highlight NonText guibg=none
-    ]])
-end
+-- idk why default theme is a mess
+require("ksolarized")
 
 vim.opt.matchtime = 2
 vim.opt.pumheight = 20
