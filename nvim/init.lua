@@ -1,7 +1,11 @@
+local lightweight = true
+
 vim.opt.fileencodings = "utf-8,cp932,sjis"
 vim.loader.enable()
 
-require("kplugin")
+if not lightweight then
+    require("kplugin")
+end
 
 vim.opt.tabstop = 4
 vim.opt.shiftwidth = 4
@@ -38,10 +42,15 @@ vim.opt.ignorecase = true
 vim.opt.matchpairs:append({ "<:>" })
 vim.opt.diffopt:append({ "algorithm:histogram" })
 
-vim.cmd([[
-    highlight Normal guibg=none
-    highlight NonText guibg=none
-]])
+if lightweight then
+    -- idk why default theme is a mess
+    vim.cmd("colorscheme quiet")
+else
+    vim.cmd([[
+        highlight Normal guibg=none
+        highlight NonText guibg=none
+    ]])
+end
 
 vim.opt.matchtime = 2
 vim.opt.pumheight = 20
