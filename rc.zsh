@@ -2,6 +2,7 @@ alias ls='ls -h --color'
 
 alias sl=ls
 alias v=nvim
+alias sv=sudoedit
 alias lg='HUSKY=0 lazygit'
 alias vimdiff="nvim -d"
 alias repo='__D=`ghq list | fzf` && cd "$HOME/repo/$__D"'
