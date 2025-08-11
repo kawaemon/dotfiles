@@ -40,7 +40,7 @@ key = "LBracket"
 mods = "Control"
 
 [mouse]
-hide_when_typing = true
+hide_when_typing = false
 
 [window]
 title = "Terminal"
