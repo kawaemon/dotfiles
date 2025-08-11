@@ -13,3 +13,7 @@ vimcmd_symbol = '[v](green)'
 vimcmd_replace_one_symbol = 'v'
 vimcmd_replace_symbol = '[v](purple)'
 vimcmd_visual_symbol = '[v](yellow)'
+
+[hostname]
+ssh_only = false
+style = "bold yellow"
