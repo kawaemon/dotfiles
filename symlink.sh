@@ -19,6 +19,9 @@ ln -sfv $PWD/starship.toml $HOME/.config/starship.toml
 ln -sfv $PWD/chromium-flags.conf $HOME/.config/chromium-flags.conf
 ln -sfvn $PWD/polybar $HOME/.config/polybar
 
+mkdir -p $HOME/.config/aerospace/
+ln -sfv $PWD/aerospace.toml $HOME/.config/aerospace/aerospace.toml
+
 mkdir -p $HOME/.config/alacritty/
 ln -sfv $PWD/alacritty.toml $HOME/.config/alacritty/alacritty.toml
 
