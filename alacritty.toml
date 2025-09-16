@@ -27,7 +27,7 @@ size = 7
 
 [font.normal]
 family = "JetBrainsMono Nerd Font Mono"
-style = "Regular"
+style = "ExtraLight"
 
 [[keyboard.bindings]]
 chars = "\u0011"
