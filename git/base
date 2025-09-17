@@ -7,7 +7,7 @@
 [user]
     email = me@kawaemon.dev
     name = kawaemon
-    signingKey = 26964048E4EFF64184AF77F3E6489583F95924E1
+    signingKey = key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHJExDIiG9ddX/KlFgwjucFc8L1GhvprGl09rH0y11d/
 
 [includeIf "gitdir:~/repo/github.com/C-Style-team/"]
     path = ~/repo/github.com/kawaemon/dotfiles/git/work-profile/c-style
@@ -31,6 +31,9 @@
     # from https://qiita.com/Yinaura/items/30992f25b87f76af3ba2
     current-branch-name = ! git branch | grep -e '^\\* ' | sed -e 's/^\\* //g'
     force-pull = !git fetch && git reset --hard origin/$(git current-branch-name)
+
+[gpg]
+    format = ssh
 
 [commit]
     gpgsign = true
