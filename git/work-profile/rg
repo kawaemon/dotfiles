@@ -1,0 +1,5 @@
+# vim: ft=gitconfig
+
+[user]
+    email = kawaemon@sfc.wide.ad.jp
+    name = Kyosuke Kawakami
