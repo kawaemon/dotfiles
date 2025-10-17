@@ -9,7 +9,7 @@ echo
 
 ln -sfv $PWD/git/base $HOME/.gitconfig
 ln -sfv $PWD/tmux.conf $HOME/.tmux.conf
-ln -sfv $PWD/rc.zsh $HOME/.zshrc.shared
+ln -sfv $PWD/zshrc $HOME/.zshrc.shared
 ln -sfv $PWD/sqliterc $HOME/.sqliterc
 ln -sfv $PWD/vimrc $HOME/.vimrc
 
