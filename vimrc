@@ -1,4 +1,8 @@
 " vim: ft=vim
+set nocompatible
+filetype plugin indent on
+syntax on
+
 set fileencodings=utf-8,cp932,sjis
 
 set tabstop=4

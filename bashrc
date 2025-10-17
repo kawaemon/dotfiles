@@ -1,5 +1,9 @@
 alias ls='ls -h --color'
 
+if ! command -v nvim >/dev/null 2>&1; then
+  alias nvim=vim
+fi
+
 alias sl=ls
 alias v=nvim
 alias sv=sudoedit
