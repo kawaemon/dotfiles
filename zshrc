@@ -78,7 +78,6 @@ if [[ ! -f ~/.zr.zsh ]] || [[ ~/.zshrc.shared -nt ~/.zr.zsh ]]; then
        zsh-users/zsh-syntax-highlighting \
        junegunn/fzf.git/shell/key-bindings.zsh \
     > ~/.zr.zsh
- # zsh-users/zsh-autosuggestions \
     zcompile ~/.zr.zsh
 fi
 

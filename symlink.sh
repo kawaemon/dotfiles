@@ -17,7 +17,6 @@ mkdir -p $HOME/.config
 ln -sfvn $PWD/nvim $HOME/.config/nvim
 
 ln -sfv $PWD/starship.toml $HOME/.config/starship.toml
-ln -sfv $PWD/chromium-flags.conf $HOME/.config/chromium-flags.conf
 ln -sfvn $PWD/polybar $HOME/.config/polybar
 
 mkdir -p $HOME/.config/aerospace/
