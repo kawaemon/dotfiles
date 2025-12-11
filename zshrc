@@ -1,14 +1,26 @@
 alias ls='ls -h --color'
-
+alias grep='grep --color'
 alias sl=ls
-alias v=nvim
-alias sv=sudoedit
+
 alias lg='lazygit'
 alias repo='__D=`ghq list | fzf` && cd "$HOME/repo/$__D"'
+alias kubesw='__D=`ls -d ~/.kube/*config* | fzf` && eval "export KUBECONFIG=$__D"'
 alias temp='mkdir -p /tmp/ktmp && __D=`mktemp -d /tmp/ktmp/XXX` && cd "$__D"'
 alias npm='corepack npm'
 alias yarn='corepack yarn'
 alias pnpm='corepack pnpm'
+
+if command -v nvim >/dev/null 2>&1; then
+  export EDITOR=nvim
+elif command -v vim >/dev/null 2>&1; then
+  export EDITOR=vim
+elif command -v vi >/dev/null 2>&1; then
+  export EDITOR=vi
+fi
+
+alias v=$EDITOR
+alias vim=$EDITOR
+alias nvim=$EDITOR
 
 # 古いルータなど...
 alias lssh='ssh \
@@ -31,7 +43,6 @@ function tm() {
 
 # man zshoptions
 setopt nomatch \
-       correct \
        automenu \
        list_packed \
        extendedglob \
@@ -58,8 +69,7 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 export NODE_OPTIONS="--stack-trace-limit=1000"
 export RUST_BACKTRACE=1
 
-export EDITOR="nvim"
-export VISUAL="nvim"
+export VISUAL=$EDITOR
 export MANPAGER='nvim +Man!'
 export MANWIDTH=999
 
@@ -67,7 +77,6 @@ export RUSTC_WRAPPER="sccache"
 
 export PATH="$HOME/.local/bin:$HOME/go/bin:$HOME/.cargo/bin:$PATH"
 
-autoload -U compinit && compinit
 
 if [[ ! -d ~/.tmux/plugins/tpm ]]; then
     git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
@@ -76,16 +85,22 @@ fi
 if [[ ! -f ~/.zr.zsh ]] || [[ ~/.zshrc.shared -nt ~/.zr.zsh ]]; then
     zr kawaemon/zsh-vi-mode \
        zsh-users/zsh-syntax-highlighting \
-       junegunn/fzf.git/shell/key-bindings.zsh \
     > ~/.zr.zsh
     zcompile ~/.zr.zsh
 fi
 
 source ~/.zr.zsh
 
-eval "$(mise activate zsh)"
-eval "$(starship init zsh)"
+autoload -U compinit && compinit
 
-[[ /usr/bin/kubectl ]] && source <(kubectl completion zsh)
+source <(mise activate zsh)
+source <(starship init zsh)
+
+if command -v kubectl >/dev/null 2>&1; then
+  source <(kubectl completion zsh)
+fi
+if command -v rustup >/dev/null 2>&1; then
+  source <(rustup completions zsh)
+fi
 
 tm
