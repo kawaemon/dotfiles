@@ -35,3 +35,4 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 export NODE_OPTIONS="--stack-trace-limit=1000"
 export RUST_BACKTRACE=1
 
+export PATH="$HOME/.local/bin:$HOME/go/bin:$HOME/.cargo/bin:$PATH"
