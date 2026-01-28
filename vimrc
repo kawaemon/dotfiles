@@ -31,6 +31,7 @@ endif
 set mouse=a
 set clipboard=unnamedplus
 set showmatch
+set incsearch
 set smartcase
 set ignorecase
 set matchtime=2
