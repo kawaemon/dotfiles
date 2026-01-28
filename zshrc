@@ -10,6 +10,7 @@ alias npm='corepack npm'
 alias yarn='corepack yarn'
 alias pnpm='corepack pnpm'
 alias console='tio /dev/tty.usb*'
+alias ports='ss -tulnp'
 
 if command -v nvim >/dev/null 2>&1; then
   export EDITOR=nvim
