@@ -85,8 +85,7 @@ if [[ ! -d ~/.tmux/plugins/tpm ]]; then
 fi
 
 if [[ ! -f ~/.zr.zsh ]] || [[ ~/.zshrc.shared -nt ~/.zr.zsh ]]; then
-    zr kawaemon/zsh-vi-mode \
-       zsh-users/zsh-syntax-highlighting \
+    zr zsh-users/zsh-syntax-highlighting \
     > ~/.zr.zsh
     zcompile ~/.zr.zsh
 fi
