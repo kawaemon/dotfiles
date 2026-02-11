@@ -104,4 +104,8 @@ if command -v rustup >/dev/null 2>&1; then
   source <(rustup completions zsh)
 fi
 
+# force use emacs mode
+# zsh infers key mode by EDITOR
+bindkey -e
+
 tm
