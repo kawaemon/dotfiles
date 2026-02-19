@@ -11,6 +11,7 @@ alias yarn='corepack yarn'
 alias pnpm='corepack pnpm'
 alias console='tio /dev/tty.usb* -b 9600'
 alias ports='ss -tulnp'
+alias speedtest='speedtest -s 48463'
 
 if command -v nvim >/dev/null 2>&1; then
   export EDITOR=nvim
