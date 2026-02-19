@@ -9,7 +9,7 @@ alias temp='mkdir -p /tmp/ktmp && __D=`mktemp -d /tmp/ktmp/XXX` && cd "$__D"'
 alias npm='corepack npm'
 alias yarn='corepack yarn'
 alias pnpm='corepack pnpm'
-alias console='tio /dev/tty.usb*'
+alias console='tio /dev/tty.usb* -b 9600'
 alias ports='ss -tulnp'
 
 if command -v nvim >/dev/null 2>&1; then
