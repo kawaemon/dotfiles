@@ -10,7 +10,7 @@ alias npm='corepack npm'
 alias yarn='corepack yarn'
 alias pnpm='corepack pnpm'
 alias ports='ss -tulnp'
-alias speedtest = 'speedtest -s 48463'
+alias speedtest='speedtest -s 48463'
 
 if command -v nvim >/dev/null 2>&1; then
   export EDITOR=nvim
