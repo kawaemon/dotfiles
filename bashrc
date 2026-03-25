@@ -189,8 +189,6 @@ __update_prompt() {
     PS1+=" ${__prompt_git_color}git:${git_branch}${__prompt_reset}"
     if [[ -n $git_flags ]]; then
       PS1+="[${__prompt_git_flag_color}${git_flags}${__prompt_reset}]"
-    else
-      PS1+='[]'
     fi
   fi
   PS1+=$'\n'
