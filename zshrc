@@ -55,7 +55,6 @@ source ~/.zr.zsh
 autoload -U compinit && compinit
 
 source <(mise activate zsh)
-source <(starship init zsh)
 
 if command -v kubectl >/dev/null 2>&1; then
   source <(kubectl completion zsh)
