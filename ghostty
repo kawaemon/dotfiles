@@ -2,7 +2,12 @@
 font-family = UDEV Gothic
 font-style = ExtraLight
 font-size = 22
+
+# bold の主張が激しい
 font-style-bold = Regular
+font-style-bold-italic = Italic
+
+# リガチャいらん
 font-feature = -liga
 font-feature = -dlig
 font-feature = -calt
