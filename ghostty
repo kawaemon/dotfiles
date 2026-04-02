@@ -1,9 +1,11 @@
-# ~/.config/ghostty/config
-
 # ───── Font ─────
-font-family = JetBrainsMono Nerd Font Mono
+font-family = UDEV Gothic
 font-style = ExtraLight
 font-size = 22
+font-style-bold = Regular
+font-feature = -liga
+font-feature = -dlig
+font-feature = -calt
 
 # ───── Colors (Solarized Dark) ─────
 background = 002b36
@@ -44,3 +46,4 @@ quick-terminal-size = 100%,100%
 quick-terminal-animation-duration = 0
 
 macos-option-as-alt = true
+term = xterm-256color
