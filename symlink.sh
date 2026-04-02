@@ -26,6 +26,9 @@ ln -sfv $PWD/aerospace.toml $HOME/.config/aerospace/aerospace.toml
 mkdir -p $HOME/.config/alacritty/
 ln -sfv $PWD/alacritty.toml $HOME/.config/alacritty/alacritty.toml
 
+mkdir -p $HOME/.config/ghostty/
+ln -sfv $PWD/ghostty $HOME/.config/ghostty/config.ghostty
+
 mkdir -p $HOME/.config/i3/
 ln -sfv $PWD/i3config $HOME/.config/i3/config
 
