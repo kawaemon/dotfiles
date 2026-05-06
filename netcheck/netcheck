@@ -1,0 +1,1027 @@
+#!/usr/bin/env python3
+"""Quick public Wi-Fi path check with mtr and RDAP."""
+
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import ipaddress
+import json
+import os
+import queue
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
+
+
+DEFAULT_TARGET = "one.one.one.one"
+RDAP_BASE = "https://rdap.org"
+
+KNOWN_ASNS = {
+    "174": "Cogent",
+    "701": "Verizon",
+    "7018": "AT&T",
+    "1299": "Arelion",
+    "2497": "IIJ",
+    "2516": "KDDI",
+    "2914": "NTT GIN",
+    "3257": "GTT",
+    "3320": "Deutsche Telekom",
+    "3356": "Lumen",
+    "3491": "PCCW",
+    "4637": "Telstra Global",
+    "4713": "NTT Communications JP",
+    "4788": "TM Net",
+    "6461": "Zayo",
+    "6939": "Hurricane Electric",
+    "7473": "Singtel",
+    "9505": "TwGate",
+    "9607": "BBTower",
+    "10010": "TOKAI",
+    "10026": "Pacnet",
+    "10099": "China Unicom Global",
+    "17676": "SoftBank",
+    "18106": "ViewQwest",
+    "20473": "Vultr",
+    "23764": "CTC",
+    "23947": "MEX",
+    "24218": "QTnet",
+    "24940": "Hetzner",
+    "2519": "ARTERIA",
+    "2907": "SINET",
+    "32934": "Meta",
+    "34907": "M247",
+    "37963": "Alibaba Cloud",
+    "38040": "Global Transit",
+    "38631": "LINE/Yahoo Japan",
+    "45102": "Alibaba Cloud",
+    "45629": "JPIX",
+    "58453": "China Mobile",
+    "58511": "Any2",
+    "6453": "Tata Communications",
+    "8075": "Microsoft",
+    "9002": "RETN",
+    "13335": "Cloudflare",
+    "15169": "Google",
+    "16509": "AWS",
+    "20940": "Akamai",
+    "396982": "Google Cloud",
+}
+
+KNOWN_ALLOCATION_ASNS = [
+    (("vultr", "constant company", "constant-ap"), "20473"),
+    (("internet initiative japan", "iij"), "2497"),
+    (("kddi",), "2516"),
+    (("ntt america", "ntt global", "gin-ntt", "global ip network"), "2914"),
+    (("ntt communications", "ocn"), "4713"),
+    (("softbank", "bbtec"), "17676"),
+    (("arteria", "vectant"), "2519"),
+    (("ctc", "chubu telecommunications"), "23764"),
+    (("qtnet", "kyushu telecommunication"), "24218"),
+    (("jpix",), "45629"),
+    (("cloudflare",), "13335"),
+    (("google",), "15169"),
+    (("amazon", "aws"), "16509"),
+    (("akamai",), "20940"),
+    (("microsoft",), "8075"),
+    (("cogent",), "174"),
+    (("arelion", "telia carrier"), "1299"),
+    (("lumen", "level 3"), "3356"),
+    (("hurricane electric",), "6939"),
+    (("telstra",), "4637"),
+    (("singtel",), "7473"),
+    (("pccw",), "3491"),
+    (("tata communications",), "6453"),
+    (("retn",), "9002"),
+    (("zayo",), "6461"),
+]
+
+
+class Family(StrEnum):
+    V4 = "v4"
+    V6 = "v6"
+
+
+class Proto(StrEnum):
+    ICMP = "icmp"
+    TCP = "tcp"
+    UDP = "udp"
+
+
+@dataclass(frozen=True)
+class GwEntry:
+    dev: str = "-"
+    us: str = "-"
+    them: str = "-"
+
+
+@dataclass(frozen=True)
+class ProbeKey:
+    proto: Proto
+    family: Family
+    port: int | None = None
+
+    def label(self) -> str:
+        return f"{self.proto}:{self.port}" if self.port else str(self.proto)
+
+
+@dataclass(frozen=True)
+class ProbeResult:
+    rtt_ms: float | None
+    status: str = "timeout"
+
+    @property
+    def reached(self) -> bool:
+        return self.rtt_ms is not None
+
+
+@dataclass
+class _Route:
+    family: Family
+    dev: str = ""
+    them: str = ""
+
+
+@dataclass
+class PubIpInfo:
+    ip: str | None = None
+    rdns: str | None = None
+
+
+def fetch_pub_ip(family: Family) -> tuple[Family, str]:
+    host = "1.1.1.1" if family == Family.V4 else "[2606:4700:4700::1111]"
+    url = f"http://{host}/cdn-cgi/trace"
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=2.0) as res:
+            text = res.read().decode("utf-8")
+            for line in text.splitlines():
+                if line.startswith("ip="):
+                    return family, line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return family, ""
+
+
+@dataclass(frozen=True)
+class RdapInfo:
+    handle: str = ""
+    name: str = ""
+    country: str = ""
+    registrant: str = ""
+    error: str = ""
+
+    @property
+    def label(self) -> str:
+        skip_words = {
+            "Japan Network Information Center",
+            "Asia Pacific Network Information Centre",
+            "Internet Assigned Numbers Authority",
+        }
+        candidates = []
+        for p in (self.name, self.registrant, self.country):
+            if p and not any(w in p for w in skip_words):
+                candidates.append(p)
+
+        if candidates:
+            if len(candidates) > 1 and candidates[0].upper().startswith(("NET-", "NET6-", "V6NET-", "IPV6-")):
+                return candidates[1]
+            return candidates[0]
+
+        return self.name or self.registrant or self.handle
+
+
+@dataclass
+class HopStats:
+    index: int
+    family: Family
+    ip: str = ""
+    sent: int = 0
+    recv: int = 0
+    last_ms: float | None = None
+    best_ms: float | None = None
+    worst_ms: float | None = None
+    total_ms: float = 0.0
+    asn: str = ""
+    as_name: str = ""
+    pending: set[str] | None = None
+    rdns: str | None = None  # None=pending, ""=not found/private, else=hostname
+
+    @property
+    def avg_ms(self) -> float | None:
+        if not self.recv:
+            return None
+        return self.total_ms / self.recv
+
+    @property
+    def loss_pct(self) -> float | None:
+        if not self.sent:
+            return None
+        return (self.sent - self.recv) * 100.0 / self.sent
+
+    def note_reply(self, usec: int) -> None:
+        ms = usec / 1000.0
+        self.sent += 1
+        self.recv += 1
+        self.last_ms = ms
+        self.best_ms = ms if self.best_ms is None else min(self.best_ms, ms)
+        self.worst_ms = ms if self.worst_ms is None else max(self.worst_ms, ms)
+        self.total_ms += ms
+
+    def note_probe(self, seq: str) -> None:
+        if self.pending is None:
+            self.pending = set()
+        self.pending.add(seq)
+
+    def note_losses(self) -> None:
+        if not self.pending:
+            return
+        self.sent += len(self.pending)
+        self.pending.clear()
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run mtr to a target and summarize packet loss, transit ASNs, and AS path.",
+    )
+    parser.add_argument("target", nargs="?", default=DEFAULT_TARGET)
+    privileged = os.geteuid() == 0
+    default_count = 20 if privileged else 10
+    default_interval = 0.2 if privileged else 1.0
+    parser.add_argument("-c", "--count", type=int, default=default_count, help="mtr probe count")
+    parser.add_argument("-i", "--interval", type=float, default=default_interval, help="mtr probe interval seconds")
+    parser.add_argument("-n", "--no-rdap", action="store_true", help="skip RDAP lookups")
+    parser.add_argument("--tcp-port", type=int, default=443, help="TCP probe port")
+    parser.add_argument("--udp-port", type=int, default=50000, help="UDP probe port")
+    parser.add_argument("--color", choices=("auto", "always", "never"), default="auto")
+    return parser.parse_args()
+
+
+def _mtr_path() -> str:
+    mtr = shutil.which("mtr")
+    if not mtr:
+        raise RuntimeError("mtr command not found")
+    return mtr
+
+
+def _build_mtr_cmd(mtr: str, args: argparse.Namespace, *mode_flags: str) -> list[str]:
+    return [mtr, *mode_flags, "-n", "-c", str(args.count), "-i", str(args.interval), "-G", "0.5", "-m", "30", args.target]
+
+
+def rdap_get(kind: str, value: str, timeout: float = 2.0) -> RdapInfo:
+    url = f"{RDAP_BASE}/{kind}/{value}"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/rdap+json, application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            data = json.load(res)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        return RdapInfo(error=str(exc))
+
+    return RdapInfo(
+        handle=str(data.get("handle") or ""),
+        name=str(data.get("name") or ""),
+        country=str(data.get("country") or ""),
+        registrant=entity_name(data.get("entities", []), {"technical", "administrative", "abuse", "registrant"}),
+    )
+
+
+def infer_asn_from_allocation(label: str) -> str:
+    lowered = label.lower()
+    for patterns, asn in KNOWN_ALLOCATION_ASNS:
+        if any(pattern in lowered for pattern in patterns):
+            return asn
+    return ""
+
+
+def allocation_lookup(ip: str, no_rdap: bool) -> tuple[str, str]:
+    if no_rdap:
+        return "", ""
+    info = rdap_get("ip", ip)
+    label = info.label
+    asn = infer_asn_from_allocation(label)
+    if asn:
+        return asn, KNOWN_ASNS.get(asn, label)
+    return "", label
+
+
+def entity_name(entities: Any, preferred_roles: set[str]) -> str:
+    if not isinstance(entities, list):
+        return ""
+    fallback = ""
+    for entity in entities:
+        if not isinstance(entity, dict):
+            continue
+        name = vcard_name(entity.get("vcardArray"))
+        if name and not fallback:
+            fallback = name
+        roles = set(entity.get("roles") or [])
+        if name and roles & preferred_roles:
+            return name
+        
+        # Fallback to sub-entities if a name hasn't been found
+        sub_name = entity_name(entity.get("entities", []), preferred_roles)
+        if sub_name:
+            if not fallback:
+                fallback = sub_name
+            if roles & preferred_roles:
+                return sub_name
+
+    return fallback
+
+
+def vcard_name(vcard: Any) -> str:
+    if not (isinstance(vcard, list) and len(vcard) == 2 and isinstance(vcard[1], list)):
+        return ""
+    for item in vcard[1]:
+        if not (isinstance(item, list) and len(item) >= 4):
+            continue
+        if item[0] in {"fn", "org"} and item[3]:
+            value = item[3]
+            if isinstance(value, list):
+                return " ".join(str(v) for v in value if v)
+            return str(value)
+    return ""
+
+
+def run_text(cmd: list[str], timeout: float = 1.0) -> str:
+    try:
+        proc = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return proc.stdout
+
+
+def add_unique(values: list[str], value: str) -> None:
+    if value and value not in values:
+        values.append(value)
+
+
+def source_address(family: socket.AddressFamily, remote: tuple[Any, ...]) -> str:
+    try:
+        with socket.socket(family, socket.SOCK_DGRAM) as sock:
+            sock.connect(remote)
+            return str(sock.getsockname()[0])
+    except OSError:
+        return ""
+
+
+def default_routes() -> list[_Route]:
+    routes: list[_Route] = []
+
+    for family, cmd in (
+        (Family.V4, ["ip", "route", "show", "default"]),
+        (Family.V6, ["ip", "-6", "route", "show", "default"]),
+    ):
+        for line in run_text(cmd).splitlines():
+            parts = line.split()
+            route = _Route(family=family)
+            if "dev" in parts:
+                idx = parts.index("dev")
+                if idx + 1 < len(parts):
+                    route.dev = parts[idx + 1]
+            if "via" in parts:
+                idx = parts.index("via")
+                if idx + 1 < len(parts):
+                    route.them = parts[idx + 1]
+            if route.dev or route.them:
+                routes.append(route)
+
+    for family, cmd in (
+        (Family.V4, ["route", "-n", "get", "default"]),
+        (Family.V6, ["route", "-n", "get", "-inet6", "default"]),
+    ):
+        route = _Route(family=family)
+        for line in run_text(cmd).splitlines():
+            stripped = line.strip()
+            if stripped.startswith("interface:"):
+                route.dev = stripped.split(":", 1)[1].strip()
+            if stripped.startswith("gateway:"):
+                route.them = stripped.split(":", 1)[1].strip()
+        if route.dev or route.them:
+            routes.append(route)
+
+    unique: list[_Route] = []
+    seen: set[tuple[Family, str, str]] = set()
+    for route in routes:
+        key = (route.family, route.dev, route.them)
+        if key not in seen:
+            seen.add(key)
+            unique.append(route)
+    return unique
+
+
+def interface_addresses(dev: str) -> dict[Family, list[str]]:
+    out: dict[Family, list[str]] = {Family.V4: [], Family.V6: []}
+
+    for line in run_text(["ip", "-o", "addr", "show", "dev", dev]).splitlines():
+        parts = line.split()
+        if "inet" in parts:
+            add_unique(out[Family.V4], parts[parts.index("inet") + 1])
+        if "inet6" in parts:
+            addr = parts[parts.index("inet6") + 1]
+            if not addr.lower().startswith("fe80:"):
+                add_unique(out[Family.V6], addr)
+
+    for line in run_text(["ifconfig", dev]).splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 2 and parts[0] == "inet":
+            prefix = ""
+            if "netmask" in parts:
+                try:
+                    mask = int(parts[parts.index("netmask") + 1], 16)
+                    prefix = f"/{mask.bit_count()}"
+                except (ValueError, IndexError):
+                    pass
+            add_unique(out[Family.V4], f"{parts[1]}{prefix}")
+        if len(parts) >= 2 and parts[0] == "inet6":
+            addr = parts[1].split("%", 1)[0]
+            if not addr.lower().startswith("fe80:"):
+                prefix = ""
+                if "prefixlen" in parts:
+                    try:
+                        prefix = f"/{parts[parts.index('prefixlen') + 1]}"
+                    except IndexError:
+                        pass
+                add_unique(out[Family.V6], f"{addr}{prefix}")
+
+    return out
+
+
+def pick_us(addrs: list[str], source: str) -> str:
+    for addr in addrs:
+        if addr.split("/", 1)[0] == source:
+            return addr
+    return addrs[0] if addrs else source
+
+
+def local_gateway_info() -> dict[Family, list[GwEntry]]:
+    out: dict[Family, list[GwEntry]] = {Family.V4: [], Family.V6: []}
+    src = {
+        Family.V4: source_address(socket.AF_INET, ("1.1.1.1", 53)),
+        Family.V6: source_address(socket.AF_INET6, ("2606:4700:4700::1111", 53, 0, 0)),
+    }
+    routes = default_routes()
+    if not routes:
+        routes = [_Route(family=fam) for fam, s in src.items() if s]
+
+    for route in routes:
+        family = route.family
+        addrs = interface_addresses(route.dev) if route.dev else {Family.V4: [], Family.V6: []}
+        out[family].append(GwEntry(
+            dev=route.dev or "-",
+            us=pick_us(addrs[family], src[family]) or "-",
+            them=route.them or "-",
+        ))
+    return out
+
+
+def is_global_ip(ip: str) -> bool:
+    try:
+        return ipaddress.ip_address(ip).is_global
+    except ValueError:
+        return False
+
+
+def ip_special_purpose(ip: str) -> str:
+    try:
+        addr = ipaddress.ip_address(ip)
+        if addr.is_global:
+            return ""
+        if addr.is_link_local:
+            return "Link-Local"
+        if addr.is_private:
+            return "Unique Local (ULA)" if addr.version == 6 else "Private Use"
+        if addr.is_loopback:
+            return "Loopback"
+        if addr.is_multicast:
+            return "Multicast"
+        if addr.is_reserved:
+            return "Reserved"
+        return "Non-Global"
+    except ValueError:
+        return ""
+
+
+class Color:
+    def __init__(self, enabled: bool) -> None:
+        self.enabled = enabled
+
+    def paint(self, text: str, code: str) -> str:
+        if not self.enabled:
+            return text
+        return f"\033[{code}m{text}\033[0m"
+
+    def dim(self, text: str) -> str:
+        return self.paint(text, "2")
+
+    def green(self, text: str) -> str:
+        return self.paint(text, "32")
+
+    def yellow(self, text: str) -> str:
+        return self.paint(text, "33")
+
+    def red(self, text: str) -> str:
+        return self.paint(text, "31")
+
+    def cyan(self, text: str) -> str:
+        return self.paint(text, "36")
+
+    def bold(self, text: str) -> str:
+        return self.paint(text, "1")
+
+
+def use_color(mode: str) -> bool:
+    if mode == "always":
+        return True
+    if mode == "never" or os.environ.get("NO_COLOR"):
+        return False
+    return sys.stdout.isatty()
+
+
+def color_loss(value: float | None, color: Color, width: int = 0) -> str:
+    text = ("-" if value is None else f"{value:.1f}%").rjust(width)
+    if value is None:
+        return color.dim(text)
+    if value >= 5:
+        return color.red(text)
+    if value > 0:
+        return color.yellow(text)
+    return color.green(text)
+
+
+def color_latency(value: float | None, color: Color, width: int = 0) -> str:
+    text = ("-" if value is None else f"{value:.1f}ms").rjust(width)
+    if value is None:
+        return color.dim(text)
+    if value >= 150:
+        return color.red(text)
+    if value >= 50:
+        return color.yellow(text)
+    return text
+
+
+def as_label(asn: str, name: str = "") -> str:
+    if asn.startswith("AS"):
+        asn = asn[2:]
+    if asn and name:
+        return f"AS{asn} - {name}"
+    if asn:
+        return f"AS{asn}"
+    return name
+
+
+def visible_hops(hops: dict[tuple[Family, int], HopStats]) -> dict[Family, list[HopStats]]:
+    by_fam: dict[Family, list[HopStats]] = {}
+    for fam, i in sorted(hops.keys(), key=lambda k: (k[0], k[1])):
+        hop = hops[(fam, i)]
+        fam_list = by_fam.setdefault(fam, [])
+        if fam_list and hop.ip and hop.ip == fam_list[-1].ip:
+            continue
+        fam_list.append(hop)
+    return by_fam
+
+
+def reverse_dns(ip: str) -> str:
+    try:
+        hostname = socket.getnameinfo((ip, 0), 0)[0]
+        return "" if hostname == ip else hostname
+    except (socket.gaierror, OSError):
+        return ""
+
+
+def _resolve(host: str) -> dict[Family, str]:
+    result: dict[Family, str] = {}
+    for fam, sock_fam in ((Family.V4, socket.AF_INET), (Family.V6, socket.AF_INET6)):
+        try:
+            infos = socket.getaddrinfo(host, None, sock_fam, socket.SOCK_STREAM)
+            if infos:
+                result[fam] = infos[0][4][0]
+        except socket.gaierror:
+            pass
+    return result
+
+
+def probe_icmp(addr: str, family: Family, timeout: float = 3.0) -> ProbeResult:
+    flag = "-6" if family == Family.V6 else "-4"
+    out = run_text(["ping", flag, "-c", "1", "-W", str(int(timeout)), addr], timeout=timeout + 1)
+    m = re.search(r"time[=<]([\d.]+)", out)
+    if m:
+        return ProbeResult(rtt_ms=float(m.group(1)), status="ok")
+    return ProbeResult(rtt_ms=None)
+
+
+def probe_tcp(addr: str, port: int, timeout: float = 3.0) -> ProbeResult:
+    t0 = time.monotonic()
+    try:
+        with socket.create_connection((addr, port), timeout=timeout):
+            pass
+        return ProbeResult(rtt_ms=(time.monotonic() - t0) * 1000, status="ok")
+    except ConnectionRefusedError:
+        return ProbeResult(rtt_ms=(time.monotonic() - t0) * 1000, status="ok")
+    except socket.timeout:
+        return ProbeResult(rtt_ms=None)
+    except OSError as exc:
+        return ProbeResult(rtt_ms=None, status=type(exc).__name__)
+
+
+def probe_udp(addr: str, family: Family, port: int, timeout: float = 3.0) -> ProbeResult:
+    sock_fam = socket.AF_INET6 if family == Family.V6 else socket.AF_INET
+    with socket.socket(sock_fam, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(timeout)
+        try:
+            t0 = time.monotonic()
+            sock.sendto(b"netcheck", (addr, port))
+            sock.recvfrom(64)
+            return ProbeResult(rtt_ms=(time.monotonic() - t0) * 1000, status="ok")
+        except ConnectionRefusedError:
+            return ProbeResult(rtt_ms=(time.monotonic() - t0) * 1000, status="ok")
+        except socket.timeout:
+            return ProbeResult(rtt_ms=None)
+        except OSError as exc:
+            return ProbeResult(rtt_ms=None, status=type(exc).__name__)
+
+
+def _run_probe(key: ProbeKey, addr: str) -> ProbeResult:
+    match key.proto:
+        case Proto.ICMP:
+            return probe_icmp(addr, key.family)
+        case Proto.TCP:
+            assert key.port is not None
+            return probe_tcp(addr, key.port)
+        case Proto.UDP:
+            assert key.port is not None
+            return probe_udp(addr, key.family, key.port)
+        case _:
+            raise ValueError(f"unknown proto: {key.proto}")
+
+
+def _fmt_probe(result: ProbeResult | None, color: Color) -> str:
+    if result is None:
+        return color.dim("…")
+    if result.rtt_ms is not None:
+        return color.green(f"{result.rtt_ms:.1f}ms")
+    return color.red(result.status)
+
+
+def _format_as_alloc(hop: HopStats, color: Color, width: int = 0) -> str:
+    text = get_as_alloc_str(hop) or "-"
+    padded = text.ljust(width)
+    return color.cyan(padded) if hop.asn else padded
+
+
+def _rdns_display(hop: HopStats) -> str:
+    if not hop.ip:
+        return ""
+    if hop.rdns is None:
+        return "…"
+    return hop.rdns or "-"
+
+
+def get_as_alloc_str(hop: HopStats) -> str:
+    if hop.asn or hop.as_name:
+        return as_label(hop.asn, hop.as_name)
+    if hop.ip:
+        return ip_special_purpose(hop.ip)
+    return ""
+
+
+def print_gateway_block(gw: dict[Family, list[GwEntry]], pub_info: dict[Family, PubIpInfo], color: Color) -> None:
+    print(f"{color.bold('gw')}:")
+    for family in (Family.V4, Family.V6):
+        entries = gw.get(family) or []
+        pi = pub_info.get(family, PubIpInfo())
+        pub_ip_str = "…" if pi.ip is None else (pi.ip or "-")
+        pub_rdns_str = ""
+        if pi.ip:
+            rdns_val = "…" if pi.rdns is None else (pi.rdns or "-")
+            pub_rdns_str = f" ({rdns_val})"
+        
+        nat_str = ""
+        if pi.ip and entries:
+            us_ip = entries[0].us.split("/")[0] if entries[0].us != "-" else ""
+            if us_ip and us_ip != pi.ip:
+                if family == Family.V4:
+                    nat_str = color.yellow(" (NAT)")
+                else:
+                    try:
+                        us_v6 = ipaddress.IPv6Address(us_ip)
+                        pub_v6 = ipaddress.IPv6Address(pi.ip)
+                        if us_v6.packed[8:] == pub_v6.packed[8:]:
+                            nat_str = color.yellow(" (NPTv6)")
+                        else:
+                            nat_str = color.yellow(" (NAT66)")
+                    except ValueError:
+                        nat_str = color.yellow(" (NAT66)")
+
+        pub_str = f"pub: {color.cyan(pub_ip_str)}{pub_rdns_str}{nat_str}"
+        if not entries:
+            print(f"  {family}: -")
+            print(f"      {pub_str}")
+            continue
+        for i, entry in enumerate(entries):
+            print(
+                f"  {family}: "
+                f"dev: {color.cyan(entry.dev)}, "
+                f"us: {color.cyan(entry.us)}, "
+                f"them: {color.cyan(entry.them)}"
+            )
+            if i == 0:
+                print(f"      {pub_str}")
+
+
+def render_live(
+    target: str,
+    gw: dict[Family, list[GwEntry]],
+    hops: dict[tuple[Family, int], HopStats],
+    color: Color,
+    *,
+    clear: bool,
+    done: bool = False,
+    probes: dict[ProbeKey, ProbeResult | None] | None = None,
+    pub_info: dict[Family, PubIpInfo] | None = None,
+) -> None:
+    visible_by_fam = visible_hops(hops)
+    all_visible = [h for fam_list in visible_by_fam.values() for h in fam_list]
+    ip_width = max((len(hop.ip or "-") for hop in all_visible), default=15)
+    as_width = max((len(get_as_alloc_str(hop)) for hop in all_visible if hop.ip), default=13)
+    as_width = max(as_width, 13)
+    rdns_width = max((len(_rdns_display(hop)) for hop in all_visible if hop.ip), default=0)
+    if rdns_width > 0:
+        rdns_width = max(rdns_width, 4)
+
+    if clear:
+        print("\033[H\033[2J", end="")
+    status = color.green("done") if done else color.yellow("running")
+    print(f"{color.bold('target')}: {target}  {color.bold('status')}: {status}")
+    print_gateway_block(gw, pub_info or {Family.V4: PubIpInfo(), Family.V6: PubIpInfo()}, color)
+
+    if probes:
+        label_keys: dict[str, list[ProbeKey]] = {}
+        fams: list[Family] = []
+        for key in probes:
+            lbl = key.label()
+            if lbl not in label_keys:
+                label_keys[lbl] = []
+            label_keys[lbl].append(key)
+            if key.family not in fams:
+                fams.append(key.family)
+        label_w = max(len(lbl) for lbl in label_keys)
+        print(f"{color.bold('probe')}:")
+        for lbl, keys in label_keys.items():
+            key_map = {k.family: k for k in keys}
+            cols = "  ".join(
+                f"{fam}: {_fmt_probe(probes.get(key_map[fam]), color)}"
+                for fam in fams
+                if fam in key_map
+            )
+            print(f"  {lbl.ljust(label_w)}  {cols}")
+
+    print()
+    header_rdns = f" {'rdns'.ljust(rdns_width)}" if rdns_width > 0 else ""
+    header_str = f"{'hop':>3} {'loss':>7} {'snt':>4} {'last':>8} {'ip':<{ip_width}} {'as/allocation':<{as_width}}{header_rdns}"
+
+    for fam in (Family.V4, Family.V6):
+        if fam not in visible_by_fam:
+            continue
+        print(color.bold(f"trace {fam}:"))
+        print(header_str)
+        for hop in visible_by_fam[fam]:
+            rdns_str = _rdns_display(hop)
+            rdns_col = f" {rdns_str}" if rdns_width > 0 else ""
+            print(
+                f"{hop.index + 1:>3} "
+                f"{color_loss(hop.loss_pct, color, 7)} "
+                f"{hop.sent:>4} "
+                f"{color_latency(hop.last_ms, color, 8)} "
+                f"{color.cyan((hop.ip or '-').ljust(ip_width))} "
+                f"{_format_as_alloc(hop, color, as_width)}"
+                f"{rdns_col}"
+            )
+    sys.stdout.flush()
+
+
+def _apply_lookup(
+    future: concurrent.futures.Future[tuple[str, str]],
+    key: tuple[Family, int],
+    hops: dict[tuple[Family, int], HopStats],
+    ip_as_cache: dict[str, tuple[str, str]],
+) -> None:
+    asn, as_name = future.result()
+    if not (asn or as_name) or key not in hops:
+        return
+    ip = hops[key].ip
+    ip_as_cache[ip] = (asn, as_name)
+    for hop in hops.values():
+        if hop.ip == ip:
+            hop.asn = asn
+            hop.as_name = as_name
+
+
+def _apply_rdns(
+    future: concurrent.futures.Future[str],
+    key: tuple[Family, int],
+    hops: dict[tuple[Family, int], HopStats],
+    ip_rdns_cache: dict[str, str],
+) -> None:
+    hostname = future.result()
+    if key not in hops:
+        return
+    ip = hops[key].ip
+    ip_rdns_cache[ip] = hostname
+    for hop in hops.values():
+        if hop.ip == ip:
+            hop.rdns = hostname
+
+
+def run_live(args: argparse.Namespace, color: Color) -> int:
+    cmd = _build_mtr_cmd(_mtr_path(), args, "-l")
+
+    hops: dict[tuple[Family, int], HopStats] = {}
+    lookup_futures: dict[concurrent.futures.Future[tuple[str, str]], tuple[Family, int]] = {}
+    rdns_futures: dict[concurrent.futures.Future[str], tuple[Family, int]] = {}
+    probe_futures: dict[concurrent.futures.Future[ProbeResult], ProbeKey] = {}
+    probes: dict[ProbeKey, ProbeResult | None] = {}
+    lookup_ips: set[str] = set()
+    ip_as_cache: dict[str, tuple[str, str]] = {}
+    ip_rdns_cache: dict[str, str] = {}
+    clear = color.enabled and sys.stdout.isatty()
+    gw = local_gateway_info()
+    pub_info: dict[Family, PubIpInfo] = {Family.V4: PubIpInfo(), Family.V6: PubIpInfo()}
+    pub_ip_futures: dict[concurrent.futures.Future[tuple[Family, str]], Family] = {}
+    pub_rdns_futures: dict[concurrent.futures.Future[str], tuple[Family, str]] = {}
+
+    resolved = _resolve(args.target)
+    if not resolved:
+        print(f"netcheck: Could not resolve target {args.target}", file=sys.stderr)
+        return 1
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        for fam in (Family.V4, Family.V6):
+            pub_ip_futures[executor.submit(fetch_pub_ip, fam)] = fam
+
+        for fam, addr in resolved.items():
+            probe_specs: list[ProbeKey] = [ProbeKey(Proto.ICMP, fam)]
+            if args.tcp_port:
+                probe_specs.append(ProbeKey(Proto.TCP, fam, args.tcp_port))
+            if args.udp_port:
+                probe_specs.append(ProbeKey(Proto.UDP, fam, args.udp_port))
+            for key in probe_specs:
+                probe_futures[executor.submit(_run_probe, key, addr)] = key
+                probes[key] = None
+
+        procs: list[subprocess.Popen[str]] = []
+        q: queue.Queue[tuple[Family, str] | None] = queue.Queue()
+
+        def _read_stdout(p: subprocess.Popen[str], f: Family) -> None:
+            assert p.stdout is not None
+            for raw_line in p.stdout:
+                q.put((f, raw_line))
+            q.put(None)
+
+        for fam, addr in resolved.items():
+            fam_cmd = cmd.copy()
+            fam_cmd[-1] = addr
+            proc = subprocess.Popen(
+                fam_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            procs.append(proc)
+            threading.Thread(target=_read_stdout, args=(proc, fam), daemon=True).start()
+
+        active_procs = len(procs)
+        try:
+            while active_procs > 0:
+                try:
+                    item = q.get(timeout=0.1)
+                except queue.Empty:
+                    item = ("", "")
+
+                if item is None:
+                    active_procs -= 1
+                    continue
+                if item != ("", ""):
+                    fam, raw_line = item
+                    line = raw_line.strip()
+                    if line:
+                        parts = line.split()
+                        if len(parts) >= 3:
+                            try:
+                                index = int(parts[1])
+                                key = (fam, index)
+                                hop = hops.setdefault(key, HopStats(index=index, family=fam))
+
+                                match parts[0]:
+                                    case "x":
+                                        hop.note_probe(parts[2])
+                                    case "h":
+                                        hop.ip = parts[2]
+                                        if hop.ip in ip_as_cache:
+                                            hop.asn, hop.as_name = ip_as_cache[hop.ip]
+                                        if hop.ip in ip_rdns_cache:
+                                            hop.rdns = ip_rdns_cache[hop.ip]
+                                        elif is_global_ip(hop.ip):
+                                            hop.rdns = None  # pending lookup
+                                        else:
+                                            hop.rdns = ""  # private IP, skip
+                                        if is_global_ip(hop.ip) and hop.ip not in lookup_ips:
+                                            lookup_ips.add(hop.ip)
+                                            lookup_futures[executor.submit(allocation_lookup, hop.ip, args.no_rdap)] = key
+                                            rdns_futures[executor.submit(reverse_dns, hop.ip)] = key
+                                    case "p":
+                                        try:
+                                            if hop.pending and len(parts) >= 4:
+                                                hop.pending.discard(parts[3])
+                                            hop.note_reply(int(parts[2]))
+                                        except ValueError:
+                                            pass
+                            except ValueError:
+                                pass
+
+                for future in [f for f in lookup_futures if f.done()]:
+                    _apply_lookup(future, lookup_futures.pop(future), hops, ip_as_cache)
+                for future in [f for f in rdns_futures if f.done()]:
+                    _apply_rdns(future, rdns_futures.pop(future), hops, ip_rdns_cache)
+                for future in [f for f in probe_futures if f.done()]:
+                    probe_key = probe_futures.pop(future)
+                    probes[probe_key] = future.result()
+                for future in [f for f in pub_ip_futures if f.done()]:
+                    fam = pub_ip_futures.pop(future)
+                    _, ip = future.result()
+                    pub_info[fam].ip = ip
+                    if ip:
+                        pub_rdns_futures[executor.submit(reverse_dns, ip)] = (fam, ip)
+                    else:
+                        pub_info[fam].rdns = ""
+                for future in [f for f in pub_rdns_futures if f.done()]:
+                    fam, ip = pub_rdns_futures.pop(future)
+                    if pub_info[fam].ip == ip:
+                        pub_info[fam].rdns = future.result()
+
+                render_live(args.target, gw, hops, color, clear=clear, probes=probes, pub_info=pub_info)
+        except KeyboardInterrupt:
+            for p in procs:
+                p.terminate()
+        finally:
+            for p in procs:
+                try:
+                    p.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait(timeout=1)
+            for future, idx in list(lookup_futures.items()):
+                if future.done():
+                    _apply_lookup(future, idx, hops, ip_as_cache)
+            for future, idx in list(rdns_futures.items()):
+                if future.done():
+                    _apply_rdns(future, idx, hops, ip_rdns_cache)
+
+    stderr = ""
+    returncode = 0
+    for p in procs:
+        if p.stderr is not None:
+            err = p.stderr.read().strip()
+            if err:
+                stderr += f"{err}\n"
+        if p.returncode not in (0, -15):
+            returncode = p.returncode or 1
+
+    for hop in hops.values():
+        hop.note_losses()
+    render_live(args.target, gw, hops, color, clear=clear, done=True, probes=probes, pub_info=pub_info)
+    if returncode != 0:
+        if stderr:
+            print(f"mtr: {stderr.strip()}", file=sys.stderr)
+        return returncode
+    return 0
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        return run_live(args, Color(use_color(args.color)))
+    except RuntimeError as exc:
+        print(f"netcheck: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

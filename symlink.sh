@@ -46,3 +46,6 @@ ln -sfv $PWD/poetry.toml $HOME/.config/pypoetry/config.toml
 
 mkdir -p $HOME/.cargo/
 ln -sfv $PWD/cargo.toml $HOME/.cargo/config.toml
+
+mkdir -p $HOME/.local/bin
+ln -sfv $PWD/netcheck/netcheck $HOME/.local/bin/netcheck
