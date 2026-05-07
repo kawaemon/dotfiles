@@ -384,46 +384,42 @@ def source_address(family: socket.AddressFamily, remote: tuple[Any, ...]) -> str
 def default_routes() -> list[_Route]:
     routes: list[_Route] = []
 
-    for family, cmd in (
-        (Family.V4, ["ip", "route", "show", "default"]),
-        (Family.V6, ["ip", "-6", "route", "show", "default"]),
-    ):
-        for line in run_text(cmd).splitlines():
-            parts = line.split()
+    if sys.platform == "darwin":
+        # macOS: `route -n get default` returns the single best route, avoiding
+        # virtual interfaces (utun*, bridge*) that may appear in `ip route` via iproute2mac.
+        for family, cmd in (
+            (Family.V4, ["route", "-n", "get", "default"]),
+            (Family.V6, ["route", "-n", "get", "-inet6", "default"]),
+        ):
             route = _Route(family=family)
-            if "dev" in parts:
-                idx = parts.index("dev")
-                if idx + 1 < len(parts):
-                    route.dev = parts[idx + 1]
-            if "via" in parts:
-                idx = parts.index("via")
-                if idx + 1 < len(parts):
-                    route.them = parts[idx + 1]
+            for line in run_text(cmd).splitlines():
+                stripped = line.strip()
+                if stripped.startswith("interface:"):
+                    route.dev = stripped.split(":", 1)[1].strip()
+                if stripped.startswith("gateway:"):
+                    route.them = stripped.split(":", 1)[1].strip()
             if route.dev or route.them:
                 routes.append(route)
+    else:
+        for family, cmd in (
+            (Family.V4, ["ip", "route", "show", "default"]),
+            (Family.V6, ["ip", "-6", "route", "show", "default"]),
+        ):
+            for line in run_text(cmd).splitlines():
+                parts = line.split()
+                route = _Route(family=family)
+                if "dev" in parts:
+                    idx = parts.index("dev")
+                    if idx + 1 < len(parts):
+                        route.dev = parts[idx + 1]
+                if "via" in parts:
+                    idx = parts.index("via")
+                    if idx + 1 < len(parts):
+                        route.them = parts[idx + 1]
+                if route.dev or route.them:
+                    routes.append(route)
 
-    for family, cmd in (
-        (Family.V4, ["route", "-n", "get", "default"]),
-        (Family.V6, ["route", "-n", "get", "-inet6", "default"]),
-    ):
-        route = _Route(family=family)
-        for line in run_text(cmd).splitlines():
-            stripped = line.strip()
-            if stripped.startswith("interface:"):
-                route.dev = stripped.split(":", 1)[1].strip()
-            if stripped.startswith("gateway:"):
-                route.them = stripped.split(":", 1)[1].strip()
-        if route.dev or route.them:
-            routes.append(route)
-
-    unique: list[_Route] = []
-    seen: set[tuple[Family, str, str]] = set()
-    for route in routes:
-        key = (route.family, route.dev, route.them)
-        if key not in seen:
-            seen.add(key)
-            unique.append(route)
-    return unique
+    return routes
 
 
 def interface_addresses(dev: str) -> dict[Family, list[str]]:
@@ -611,15 +607,27 @@ def _resolve(host: str) -> dict[Family, str]:
         try:
             infos = socket.getaddrinfo(host, None, sock_fam, socket.SOCK_STREAM)
             if infos:
-                result[fam] = infos[0][4][0]
+                addr = infos[0][4][0]
+                # Skip IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) returned for IPv4 literals
+                if fam == Family.V6 and ipaddress.IPv6Address(addr).ipv4_mapped is not None:
+                    continue
+                result[fam] = addr
         except socket.gaierror:
             pass
     return result
 
 
 def probe_icmp(addr: str, family: Family, timeout: float = 3.0) -> ProbeResult:
-    flag = "-6" if family == Family.V6 else "-4"
-    out = run_text(["ping", flag, "-c", "1", "-W", str(int(timeout)), addr], timeout=timeout + 1)
+    if sys.platform == "darwin":
+        # macOS: no -4/-6 flag; IPv6 needs ping6.
+        # ping -W is milliseconds; ping6 has no timeout arg, rely on run_text timeout.
+        if family == Family.V6:
+            out = run_text(["ping6", "-c", "1", addr], timeout=timeout + 1)
+        else:
+            out = run_text(["ping", "-c", "1", "-W", str(int(timeout * 1000)), addr], timeout=timeout + 1)
+    else:
+        flag = "-6" if family == Family.V6 else "-4"
+        out = run_text(["ping", flag, "-c", "1", "-W", str(int(timeout)), addr], timeout=timeout + 1)
     m = re.search(r"time[=<]([\d.]+)", out)
     if m:
         return ProbeResult(rtt_ms=float(m.group(1)), status="ok")
@@ -644,10 +652,13 @@ def probe_udp(addr: str, family: Family, port: int, timeout: float = 3.0) -> Pro
     sock_fam = socket.AF_INET6 if family == Family.V6 else socket.AF_INET
     with socket.socket(sock_fam, socket.SOCK_DGRAM) as sock:
         sock.settimeout(timeout)
+        # connect() is required for ICMP port-unreachable to surface as
+        # ConnectionRefusedError on BSD/macOS; unconnected sendto() silently drops it.
+        sock.connect((addr, port))
         try:
             t0 = time.monotonic()
-            sock.sendto(b"netcheck", (addr, port))
-            sock.recvfrom(64)
+            sock.send(b"netcheck")
+            sock.recv(64)
             return ProbeResult(rtt_ms=(time.monotonic() - t0) * 1000, status="ok")
         except ConnectionRefusedError:
             return ProbeResult(rtt_ms=(time.monotonic() - t0) * 1000, status="ok")
