@@ -23,7 +23,7 @@ from enum import StrEnum
 from typing import Any
 
 
-DEFAULT_TARGET = "one.one.one.one"
+DEFAULT_TARGET = os.environ.get("NETCHECK_TARGET") or "one.one.one.one"
 RDAP_BASE = "https://rdap.org"
 
 KNOWN_ASNS = {
@@ -254,16 +254,32 @@ def parse_args() -> argparse.Namespace:
         description="Run mtr to a target and summarize packet loss, transit ASNs, and AS path.",
     )
     parser.add_argument("target", nargs="?", default=DEFAULT_TARGET)
-    privileged = os.geteuid() == 0
-    default_count = 20 if privileged else 10
-    default_interval = 0.2 if privileged else 1.0
-    parser.add_argument("-c", "--count", type=int, default=default_count, help="mtr probe count")
-    parser.add_argument("-i", "--interval", type=float, default=default_interval, help="mtr probe interval seconds")
+    parser.add_argument("-c", "--count", type=int, default=None, help="mtr probe count")
+    parser.add_argument("-i", "--interval", type=float, default=None, help="mtr probe interval seconds")
     parser.add_argument("-n", "--no-rdap", action="store_true", help="skip RDAP lookups")
     parser.add_argument("--tcp-port", type=int, default=443, help="TCP probe port")
     parser.add_argument("--udp-port", type=int, default=50000, help="UDP probe port")
+    parser.add_argument(
+        "--sudo",
+        choices=("auto", "always", "never"),
+        default="auto",
+        help="use sudo for mtr; auto uses sudo on macOS when not already root",
+    )
     parser.add_argument("--color", choices=("auto", "always", "never"), default="auto")
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    privileged_mtr = os.geteuid() == 0 or _use_sudo_for_mtr(args)
+    if args.count is None:
+        args.count = 20 if privileged_mtr else 10
+    if args.interval is None:
+        args.interval = 0.2 if privileged_mtr else 1.0
+    return args
+
+
+def _use_sudo_for_mtr(args: argparse.Namespace) -> bool:
+    if os.geteuid() == 0 or args.sudo == "never":
+        return False
+    return args.sudo == "always" or sys.platform == "darwin"
 
 
 def _mtr_path() -> str:
@@ -273,8 +289,40 @@ def _mtr_path() -> str:
     return mtr
 
 
-def _build_mtr_cmd(mtr: str, args: argparse.Namespace, *mode_flags: str) -> list[str]:
-    return [mtr, *mode_flags, "-n", "-c", str(args.count), "-i", str(args.interval), "-G", "0.5", "-m", "30", args.target]
+def _sudo_path() -> str:
+    sudo = shutil.which("sudo")
+    if not sudo:
+        raise RuntimeError("sudo command not found; rerun as root or pass --sudo never")
+    return sudo
+
+
+def _mtr_command_prefix(args: argparse.Namespace) -> list[str]:
+    mtr = _mtr_path()
+    if not _use_sudo_for_mtr(args):
+        return [mtr]
+
+    sudo = _sudo_path()
+    proc = subprocess.run([sudo, "-v"], check=False)
+    if proc.returncode != 0:
+        raise RuntimeError("sudo authentication failed; rerun as root or pass --sudo never")
+    return [sudo, "-n", mtr]
+
+
+def _build_mtr_cmd(prefix: list[str], args: argparse.Namespace, *mode_flags: str) -> list[str]:
+    return [
+        *prefix,
+        *mode_flags,
+        "-n",
+        "-c",
+        str(args.count),
+        "-i",
+        str(args.interval),
+        "-G",
+        "0.5",
+        "-m",
+        "30",
+        args.target,
+    ]
 
 
 def rdap_get(kind: str, value: str, timeout: float = 2.0) -> RdapInfo:
@@ -861,7 +909,7 @@ def _apply_rdns(
 
 
 def run_live(args: argparse.Namespace, color: Color) -> int:
-    cmd = _build_mtr_cmd(_mtr_path(), args, "-l")
+    cmd = _build_mtr_cmd(_mtr_command_prefix(args), args, "-l")
 
     hops: dict[tuple[Family, int], HopStats] = {}
     lookup_futures: dict[concurrent.futures.Future[tuple[str, str]], tuple[Family, int]] = {}
