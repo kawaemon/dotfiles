@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Quick public Wi-Fi path check with mtr and RDAP."""
+"""Quick public Wi-Fi path check with mtr and whois."""
 
 from __future__ import annotations
 
 import argparse
 import ipaddress
-import json
 import os
 import queue
 import re
@@ -15,7 +14,6 @@ import subprocess
 import sys
 import threading
 import time
-import urllib.error
 import urllib.request
 from collections.abc import Callable
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
@@ -25,7 +23,7 @@ from typing import Any
 
 
 DEFAULT_TARGET = os.environ.get("NETCHECK_TARGET") or "one.one.one.one"
-RDAP_BASE = "https://rdap.org"
+WHOIS_IANA = "whois.iana.org"
 
 KNOWN_ASNS = {
     "174": "Cogent",
@@ -77,35 +75,6 @@ KNOWN_ASNS = {
     "20940": "Akamai",
     "396982": "Google Cloud",
 }
-
-KNOWN_ALLOCATION_ASNS = [
-    (("vultr", "constant company", "constant-ap"), "20473"),
-    (("internet initiative japan", "iij"), "2497"),
-    (("kddi",), "2516"),
-    (("ntt america", "ntt global", "gin-ntt", "global ip network"), "2914"),
-    (("ntt communications", "ocn"), "4713"),
-    (("softbank", "bbtec"), "17676"),
-    (("arteria", "vectant"), "2519"),
-    (("ctc", "chubu telecommunications"), "23764"),
-    (("qtnet", "kyushu telecommunication"), "24218"),
-    (("jpix",), "45629"),
-    (("cloudflare",), "13335"),
-    (("google",), "15169"),
-    (("amazon", "aws"), "16509"),
-    (("akamai",), "20940"),
-    (("microsoft",), "8075"),
-    (("cogent",), "174"),
-    (("arelion", "telia carrier"), "1299"),
-    (("lumen", "level 3"), "3356"),
-    (("hurricane electric",), "6939"),
-    (("telstra",), "4637"),
-    (("singtel",), "7473"),
-    (("pccw",), "3491"),
-    (("tata communications",), "6453"),
-    (("retn",), "9002"),
-    (("zayo",), "6461"),
-]
-
 
 class Family(StrEnum):
     V4 = "v4"
@@ -166,6 +135,26 @@ class ProbeResult:
         return self.rtt_ms is not None
 
 
+@dataclass(frozen=True)
+class AllocationResult:
+    asn: str = ""
+    name: str = ""
+    prefix: str = ""
+
+
+@dataclass(frozen=True)
+class PrefixAllocation:
+    network: ipaddress.IPv4Network | ipaddress.IPv6Network
+    asn: str
+    name: str
+
+    def contains(self, ip: str) -> bool:
+        try:
+            return ipaddress.ip_address(ip) in self.network
+        except ValueError:
+            return False
+
+
 @dataclass
 class _Route:
     family: Family
@@ -192,34 +181,6 @@ def fetch_pub_ip(family: Family) -> tuple[Family, str]:
     except Exception:
         pass
     return family, ""
-
-
-@dataclass(frozen=True)
-class RdapInfo:
-    handle: str = ""
-    name: str = ""
-    country: str = ""
-    registrant: str = ""
-    error: str = ""
-
-    @property
-    def label(self) -> str:
-        skip_words = {
-            "Japan Network Information Center",
-            "Asia Pacific Network Information Centre",
-            "Internet Assigned Numbers Authority",
-        }
-        candidates = []
-        for p in (self.name, self.registrant, self.country):
-            if p and not any(w in p for w in skip_words):
-                candidates.append(p)
-
-        if candidates:
-            if len(candidates) > 1 and candidates[0].upper().startswith(("NET-", "NET6-", "V6NET-", "IPV6-")):
-                return candidates[1]
-            return candidates[0]
-
-        return self.name or self.registrant or self.handle
 
 
 @dataclass
@@ -278,7 +239,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("target", nargs="?", default=DEFAULT_TARGET)
     parser.add_argument("-c", "--count", type=int, default=None, help="mtr probe count")
     parser.add_argument("-i", "--interval", type=float, default=None, help="mtr probe interval seconds")
-    parser.add_argument("-n", "--no-rdap", action="store_true", help="skip RDAP lookups")
+    parser.add_argument("-n", "--no-whois", action="store_true", help="skip whois lookups")
     parser.add_argument("--tcp-port", type=int, default=443, help="TCP probe port")
     parser.add_argument("--udp-port", type=int, default=50000, help="UDP probe port")
     parser.add_argument(
@@ -347,84 +308,215 @@ def _build_mtr_cmd(prefix: list[str], args: argparse.Namespace, *mode_flags: str
     ]
 
 
-def rdap_get(kind: str, value: str, timeout: float = 2.0) -> RdapInfo:
-    url = f"{RDAP_BASE}/{kind}/{value}"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/rdap+json, application/json",
-        },
-    )
+def whois_query(server: str, query: str, timeout: float = 4.0) -> str:
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as res:
-            data = json.load(res)
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        return RdapInfo(error=str(exc))
+        with socket.create_connection((server, 43), timeout=timeout) as sock:
+            sock.settimeout(timeout)
+            sock.sendall(f"{query}\r\n".encode("utf-8"))
+            chunks = []
+            while True:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+    except OSError:
+        return ""
+    return b"".join(chunks).decode("utf-8", "replace")
 
-    return RdapInfo(
-        handle=str(data.get("handle") or ""),
-        name=str(data.get("name") or ""),
-        country=str(data.get("country") or ""),
-        registrant=entity_name(data.get("entities", []), {"technical", "administrative", "abuse", "registrant"}),
-    )
+
+def whois_servers_for_ip(ip: str) -> list[str]:
+    iana = parse_rpsl_blocks(whois_query(WHOIS_IANA, ip))
+    server = first_attr(iana, "whois")
+    return [server] if server else []
 
 
-def infer_asn_from_allocation(label: str) -> str:
-    lowered = label.lower()
-    for patterns, asn in KNOWN_ALLOCATION_ASNS:
-        if any(pattern in lowered for pattern in patterns):
-            return asn
+def whois_query_for_server(server: str, ip: str) -> str:
+    query = f"n + {ip}" if server.endswith("arin.net") else ip
+    return whois_query(server, query)
+
+
+def whois_lookup_text(ip: str) -> str:
+    texts: list[str] = []
+    seen: set[str] = set()
+    pending = whois_servers_for_ip(ip)
+    while pending:
+        server = pending.pop(0)
+        if server in seen:
+            continue
+        seen.add(server)
+        text = whois_query_for_server(server, ip)
+        if text:
+            texts.append(text)
+            pending.extend(server for server in referral_servers(text) if server not in seen)
+    return "\n".join(texts)
+
+
+def referral_servers(text: str) -> list[str]:
+    servers: list[str] = []
+    for block in parse_rpsl_blocks(text):
+        for key in ("referralserver", "resourcelink"):
+            for value in block.get(key, []):
+                server = whois_server_from_url(value)
+                if server and server not in servers:
+                    servers.append(server)
+    return servers
+
+
+def whois_server_from_url(value: str) -> str:
+    match = re.search(r"whois://([^/\s]+)", value)
+    return match.group(1) if match else ""
+
+
+def parse_rpsl_blocks(text: str) -> list[dict[str, list[str]]]:
+    blocks: list[dict[str, list[str]]] = []
+    block: dict[str, list[str]] = {}
+    last_key = ""
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        if not line:
+            if block:
+                blocks.append(block)
+                block = {}
+                last_key = ""
+            continue
+        if line.startswith("%") or line.startswith("#"):
+            continue
+        if line[:1].isspace() and last_key:
+            block[last_key].append(line.strip())
+            continue
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        last_key = key.strip().lower()
+        block.setdefault(last_key, []).append(value.strip())
+
+    if block:
+        blocks.append(block)
+    return blocks
+
+
+def first_attr(blocks: list[dict[str, list[str]]], key: str) -> str:
+    for block in blocks:
+        values = block.get(key)
+        if values:
+            return values[0]
     return ""
 
 
-def allocation_lookup(ip: str, no_rdap: bool) -> tuple[str, str]:
-    if no_rdap:
-        return "", ""
-    info = rdap_get("ip", ip)
-    label = info.label
-    asn = infer_asn_from_allocation(label)
-    if asn:
-        return asn, KNOWN_ASNS.get(asn, label)
-    return "", label
+def block_attr(block: dict[str, list[str]], key: str) -> str:
+    values = block.get(key) or []
+    return values[0] if values else ""
 
 
-def entity_name(entities: Any, preferred_roles: set[str]) -> str:
-    if not isinstance(entities, list):
-        return ""
-    fallback = ""
-    for entity in entities:
-        if not isinstance(entity, dict):
-            continue
-        name = vcard_name(entity.get("vcardArray"))
-        if name and not fallback:
-            fallback = name
-        roles = set(entity.get("roles") or [])
-        if name and roles & preferred_roles:
-            return name
+def route_from_block(block: dict[str, list[str]], ip: str) -> PrefixAllocation | None:
+    prefix = block_attr(block, "route") or block_attr(block, "route6")
+    origin = block_attr(block, "origin")
+    if not prefix or not origin:
+        return None
+    try:
+        network = ipaddress.ip_network(prefix, strict=False)
+        if ipaddress.ip_address(ip) not in network:
+            return None
+    except ValueError:
+        return None
 
-        # Fallback to sub-entities if a name hasn't been found
-        sub_name = entity_name(entity.get("entities", []), preferred_roles)
-        if sub_name:
-            if not fallback:
-                fallback = sub_name
-            if roles & preferred_roles:
-                return sub_name
-
-    return fallback
+    asn = origin.upper().removeprefix("AS")
+    name = block_attr(block, "descr") or KNOWN_ASNS.get(asn, "")
+    return PrefixAllocation(network=network, asn=asn, name=name)
 
 
-def vcard_name(vcard: Any) -> str:
-    if not (isinstance(vcard, list) and len(vcard) == 2 and isinstance(vcard[1], list)):
-        return ""
-    for item in vcard[1]:
-        if not (isinstance(item, list) and len(item) >= 4):
-            continue
-        if item[0] in {"fn", "org"} and item[3]:
-            value = item[3]
-            if isinstance(value, list):
-                return " ".join(str(v) for v in value if v)
-            return str(value)
+def allocation_from_block(block: dict[str, list[str]], ip: str) -> PrefixAllocation | None:
+    prefix = block_attr(block, "cidr") or block_attr(block, "inet6num")
+    start_end = block_attr(block, "netrange") or block_attr(block, "inetnum")
+    name = whois_block_name(block)
+
+    network = network_from_whois_range(prefix or start_end, ip)
+    if not network:
+        return None
+    return PrefixAllocation(network=network, asn="", name=name)
+
+
+def whois_block_name(block: dict[str, list[str]]) -> str:
+    skip_words = {
+        "APNIC",
+        "ARIN",
+        "Japan Network Information Center",
+        "Asia Pacific Network Information Centre",
+        "Internet Assigned Numbers Authority",
+    }
+    candidates = [
+        *block.get("descr", []),
+        block_attr(block, "org-name"),
+        block_attr(block, "orgname"),
+        block_attr(block, "organization"),
+        block_attr(block, "netname"),
+        block_attr(block, "country"),
+    ]
+    for value in candidates:
+        if value and not is_generic_registry_name(value, skip_words):
+            return value
     return ""
+
+
+def is_generic_registry_name(value: str, skip_words: set[str]) -> bool:
+    normalized = re.sub(r"[^A-Z0-9]+", " ", value.upper()).strip()
+    return any(normalized == re.sub(r"[^A-Z0-9]+", " ", word.upper()).strip() for word in skip_words)
+
+
+def network_from_whois_range(value: str, ip: str) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
+    if not value:
+        return None
+    if "," in value:
+        value = value.split(",", 1)[0].strip()
+    try:
+        network = ipaddress.ip_network(value, strict=False)
+        return network if ipaddress.ip_address(ip) in network else None
+    except ValueError:
+        pass
+    if "-" not in value:
+        return None
+    start, end = [part.strip() for part in value.split("-", 1)]
+    try:
+        addr = ipaddress.ip_address(ip)
+        networks = ipaddress.summarize_address_range(ipaddress.ip_address(start), ipaddress.ip_address(end))
+        return max((net for net in networks if addr in net), key=lambda net: net.prefixlen, default=None)
+    except ValueError:
+        return None
+
+
+def best_prefix_match(routes: list[PrefixAllocation], ip: str) -> PrefixAllocation | None:
+    matches = [route for route in routes if route.contains(ip)]
+    if not matches:
+        return None
+    return max(matches, key=lambda route: (route.network.prefixlen, route.asn in KNOWN_ASNS))
+
+
+def allocation_lookup(ip: str, skip_lookup: bool) -> AllocationResult:
+    if skip_lookup:
+        return AllocationResult()
+    return allocation_from_whois_text(ip, whois_lookup_text(ip))
+
+
+def allocation_from_whois_text(ip: str, text: str) -> AllocationResult:
+    routes: list[PrefixAllocation] = []
+    allocations: list[PrefixAllocation] = []
+    for block in parse_rpsl_blocks(text):
+        route = route_from_block(block, ip)
+        if route:
+            routes.append(route)
+            continue
+        allocation = allocation_from_block(block, ip)
+        if allocation and allocation.name:
+            allocations.append(allocation)
+
+    route = best_prefix_match(routes, ip)
+    if route:
+        return AllocationResult(asn=route.asn, name=route.name, prefix=str(route.network))
+    allocation = best_prefix_match(allocations, ip)
+    if allocation:
+        return AllocationResult(asn=allocation.asn, name=allocation.name, prefix=str(allocation.network))
+    return AllocationResult(name=ip_special_purpose(ip))
 
 
 def run_text(cmd: list[str], timeout: float = 1.0) -> str:
@@ -799,8 +891,7 @@ def _fmt_probe(result: ProbeResult | None, color: Color) -> str:
 
 def _format_as_alloc(hop: HopStats, color: Color, width: int = 0) -> str:
     text = get_as_alloc_str(hop) or "-"
-    padded = text.ljust(width)
-    return color.cyan(padded) if hop.asn else padded
+    return text.ljust(width)
 
 
 def _rdns_display(hop: HopStats) -> str:
@@ -976,6 +1067,7 @@ class TraceState:
     lookup_ips: set[str] = field(default_factory=set)
     ip_as_cache: dict[str, tuple[str, str]] = field(default_factory=dict)
     ip_rdns_cache: dict[str, str] = field(default_factory=dict)
+    prefix_cache: list[PrefixAllocation] = field(default_factory=list)
 
     def apply_asn(self, ip: str, asn: str, as_name: str) -> None:
         self.ip_as_cache[ip] = (asn, as_name)
@@ -983,6 +1075,27 @@ class TraceState:
             if hop.ip == ip:
                 hop.asn = asn
                 hop.as_name = as_name
+
+    def apply_prefix(self, prefix: str, asn: str, as_name: str) -> None:
+        try:
+            network = ipaddress.ip_network(prefix, strict=False)
+        except ValueError:
+            return
+        route = PrefixAllocation(network=network, asn=asn, name=as_name)
+        if route not in self.prefix_cache:
+            self.prefix_cache.append(route)
+        for hop in self.hops.values():
+            if hop.ip and route.contains(hop.ip):
+                self.apply_asn(hop.ip, route.asn, route.name)
+
+    def cached_allocation(self, ip: str) -> tuple[str, str]:
+        if ip in self.ip_as_cache:
+            return self.ip_as_cache[ip]
+        route = best_prefix_match(self.prefix_cache, ip)
+        if not route:
+            return "", ""
+        self.apply_asn(ip, route.asn, route.name)
+        return route.asn, route.name
 
     def apply_rdns(self, ip: str, hostname: str) -> None:
         self.ip_rdns_cache[ip] = hostname
@@ -1049,8 +1162,8 @@ def process_mtr_line(args: argparse.Namespace, state: TraceState, jobs: AsyncJob
 
 def note_hop_ip(args: argparse.Namespace, state: TraceState, jobs: AsyncJobs, hop: HopStats, ip: str) -> None:
     hop.ip = ip
-    if ip in state.ip_as_cache:
-        hop.asn, hop.as_name = state.ip_as_cache[ip]
+    cached_asn, cached_name = state.cached_allocation(ip)
+    hop.asn, hop.as_name = cached_asn, cached_name
     if ip in state.ip_rdns_cache:
         hop.rdns = state.ip_rdns_cache[ip]
     elif is_global_ip(ip):
@@ -1058,23 +1171,27 @@ def note_hop_ip(args: argparse.Namespace, state: TraceState, jobs: AsyncJobs, ho
     else:
         hop.rdns = ""
 
-    if not is_global_ip(ip) or ip in state.lookup_ips:
+    if not is_global_ip(ip) or ip in state.lookup_ips or cached_asn or cached_name:
         return
 
     state.lookup_ips.add(ip)
     jobs.submit(
         allocation_lookup,
         ip,
-        args.no_rdap,
+        args.no_whois,
         apply=lambda result, ip=ip: apply_allocation(state, ip, result),
     )
     jobs.submit(reverse_dns, ip, apply=lambda hostname, ip=ip: state.apply_rdns(ip, hostname))
 
 
-def apply_allocation(state: TraceState, ip: str, result: tuple[str, str]) -> None:
-    asn, as_name = result
-    if asn or as_name:
-        state.apply_asn(ip, asn, as_name)
+def apply_allocation(state: TraceState, ip: str, result: AllocationResult) -> None:
+    if result.prefix and (result.asn or result.name):
+        state.apply_prefix(result.prefix, result.asn, result.name)
+        return
+    if result.asn or result.name:
+        state.apply_asn(ip, result.asn, result.name)
+        return
+    state.lookup_ips.discard(ip)
 
 
 def note_probe_reply(hop: HopStats, parts: list[str]) -> None:
