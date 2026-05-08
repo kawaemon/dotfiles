@@ -24,6 +24,9 @@ from typing import Any
 
 DEFAULT_TARGET = os.environ.get("NETCHECK_TARGET") or "one.one.one.one"
 WHOIS_IANA = "whois.iana.org"
+WHOIS_QUERY_GAP_SEC = 0.0
+_LAST_WHOIS_QUERY_AT = 0.0
+_WHOIS_RATE_LOCK = threading.Lock()
 
 KNOWN_ASNS = {
     "174": "Cogent",
@@ -87,6 +90,12 @@ class Proto(StrEnum):
     UDP = "udp"
 
 
+class LookupStatus(StrEnum):
+    UNKNOWN = ""
+    PENDING = "pending"
+    MISSING = "missing"
+
+
 FAMILIES = (Family.V4, Family.V6)
 HopKey = tuple[Family, int]
 MTR_DONE = object()
@@ -140,6 +149,9 @@ class AllocationResult:
     asn: str = ""
     name: str = ""
     prefix: str = ""
+    temporary_failure: bool = False
+    no_entry: bool = False
+    routes: tuple["PrefixAllocation", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -196,6 +208,7 @@ class HopStats:
     total_ms: float = 0.0
     asn: str = ""
     as_name: str = ""
+    alloc_status: LookupStatus = LookupStatus.UNKNOWN
     pending: set[str] | None = None
     rdns: str | None = None  # None=pending, ""=not found/private, else=hostname
 
@@ -309,18 +322,35 @@ def _build_mtr_cmd(prefix: list[str], args: argparse.Namespace, *mode_flags: str
 
 
 def whois_query(server: str, query: str, timeout: float = 4.0) -> str:
-    try:
-        with socket.create_connection((server, 43), timeout=timeout) as sock:
-            sock.settimeout(timeout)
-            sock.sendall(f"{query}\r\n".encode("utf-8"))
-            chunks = []
-            while True:
-                chunk = sock.recv(4096)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-    except OSError:
-        return ""
+    for attempt_timeout in (timeout, timeout * 2):
+        try:
+            wait_for_whois_slot()
+            return whois_query_once(server, query, attempt_timeout)
+        except OSError:
+            pass
+    return ""
+
+
+def wait_for_whois_slot() -> None:
+    global _LAST_WHOIS_QUERY_AT
+    with _WHOIS_RATE_LOCK:
+        now = time.monotonic()
+        wait = WHOIS_QUERY_GAP_SEC - (now - _LAST_WHOIS_QUERY_AT)
+        if wait > 0:
+            time.sleep(wait)
+        _LAST_WHOIS_QUERY_AT = time.monotonic()
+
+
+def whois_query_once(server: str, query: str, timeout: float) -> str:
+    with socket.create_connection((server, 43), timeout=timeout) as sock:
+        sock.settimeout(timeout)
+        sock.sendall(f"{query}\r\n".encode("utf-8"))
+        chunks = []
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            chunks.append(chunk)
     return b"".join(chunks).decode("utf-8", "replace")
 
 
@@ -409,15 +439,13 @@ def block_attr(block: dict[str, list[str]], key: str) -> str:
     return values[0] if values else ""
 
 
-def route_from_block(block: dict[str, list[str]], ip: str) -> PrefixAllocation | None:
+def route_from_block(block: dict[str, list[str]]) -> PrefixAllocation | None:
     prefix = block_attr(block, "route") or block_attr(block, "route6")
     origin = block_attr(block, "origin")
     if not prefix or not origin:
         return None
     try:
         network = ipaddress.ip_network(prefix, strict=False)
-        if ipaddress.ip_address(ip) not in network:
-            return None
     except ValueError:
         return None
 
@@ -460,8 +488,11 @@ def whois_block_name(block: dict[str, list[str]]) -> str:
 
 
 def is_generic_registry_name(value: str, skip_words: set[str]) -> bool:
-    normalized = re.sub(r"[^A-Z0-9]+", " ", value.upper()).strip()
-    return any(normalized == re.sub(r"[^A-Z0-9]+", " ", word.upper()).strip() for word in skip_words)
+    normalized = " " + re.sub(r"[^A-Z0-9]+", " ", value.upper()).strip() + " "
+    return any(
+        " " + re.sub(r"[^A-Z0-9]+", " ", word.upper()).strip() + " " in normalized
+        for word in skip_words
+    )
 
 
 def network_from_whois_range(value: str, ip: str) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
@@ -494,15 +525,18 @@ def best_prefix_match(routes: list[PrefixAllocation], ip: str) -> PrefixAllocati
 
 def allocation_lookup(ip: str, skip_lookup: bool) -> AllocationResult:
     if skip_lookup:
-        return AllocationResult()
-    return allocation_from_whois_text(ip, whois_lookup_text(ip))
+        return AllocationResult(no_entry=True)
+    text = whois_lookup_text(ip)
+    if not text:
+        return AllocationResult(temporary_failure=True)
+    return allocation_from_whois_text(ip, text)
 
 
 def allocation_from_whois_text(ip: str, text: str) -> AllocationResult:
     routes: list[PrefixAllocation] = []
     allocations: list[PrefixAllocation] = []
     for block in parse_rpsl_blocks(text):
-        route = route_from_block(block, ip)
+        route = route_from_block(block)
         if route:
             routes.append(route)
             continue
@@ -510,13 +544,18 @@ def allocation_from_whois_text(ip: str, text: str) -> AllocationResult:
         if allocation and allocation.name:
             allocations.append(allocation)
 
-    route = best_prefix_match(routes, ip)
+    matching_routes = [r for r in routes if r.contains(ip)]
+    extras = tuple(routes) + tuple(allocations)
+    route = best_prefix_match(matching_routes, ip)
     if route:
-        return AllocationResult(asn=route.asn, name=route.name, prefix=str(route.network))
+        return AllocationResult(asn=route.asn, name=route.name, prefix=str(route.network), routes=extras)
     allocation = best_prefix_match(allocations, ip)
     if allocation:
-        return AllocationResult(asn=allocation.asn, name=allocation.name, prefix=str(allocation.network))
-    return AllocationResult(name=ip_special_purpose(ip))
+        return AllocationResult(asn=allocation.asn, name=allocation.name, prefix=str(allocation.network), routes=extras)
+    special = ip_special_purpose(ip)
+    if special:
+        return AllocationResult(name=special, no_entry=True, routes=extras)
+    return AllocationResult(no_entry=True, routes=extras)
 
 
 def run_text(cmd: list[str], timeout: float = 1.0) -> str:
@@ -890,7 +929,11 @@ def _fmt_probe(result: ProbeResult | None, color: Color) -> str:
 
 
 def _format_as_alloc(hop: HopStats, color: Color, width: int = 0) -> str:
-    text = get_as_alloc_str(hop) or "-"
+    text = get_as_alloc_str(hop)
+    if not text and hop.alloc_status == LookupStatus.PENDING:
+        text = "…"
+    if not text:
+        text = "-"
     return text.ljust(width)
 
 
@@ -1064,13 +1107,17 @@ class TraceState:
     hops: dict[HopKey, HopStats] = field(default_factory=dict)
     probes: dict[ProbeKey, ProbeResult | None] = field(default_factory=dict)
     pub_info: dict[Family, PubIpInfo] = field(default_factory=lambda: {fam: PubIpInfo() for fam in FAMILIES})
-    lookup_ips: set[str] = field(default_factory=set)
+    lookup_pending: set[str] = field(default_factory=set)
+    lookup_retry_at: dict[str, float] = field(default_factory=dict)
+    lookup_status: dict[str, LookupStatus] = field(default_factory=dict)
     ip_as_cache: dict[str, tuple[str, str]] = field(default_factory=dict)
     ip_rdns_cache: dict[str, str] = field(default_factory=dict)
+    rdns_submitted: set[str] = field(default_factory=set)
     prefix_cache: list[PrefixAllocation] = field(default_factory=list)
 
     def apply_asn(self, ip: str, asn: str, as_name: str) -> None:
         self.ip_as_cache[ip] = (asn, as_name)
+        self.set_lookup_status(ip, LookupStatus.UNKNOWN)
         for hop in self.hops.values():
             if hop.ip == ip:
                 hop.asn = asn
@@ -1102,6 +1149,39 @@ class TraceState:
         for hop in self.hops.values():
             if hop.ip == ip:
                 hop.rdns = hostname
+
+    def should_lookup(self, ip: str) -> bool:
+        if self.lookup_status.get(ip) == LookupStatus.MISSING:
+            return False
+        if ip in self.lookup_pending:
+            return False
+        retry_at = self.lookup_retry_at.get(ip)
+        return retry_at is None or time.monotonic() >= retry_at
+
+    def note_lookup_started(self, ip: str) -> None:
+        self.lookup_pending.add(ip)
+        self.set_lookup_status(ip, LookupStatus.PENDING)
+
+    def note_lookup_done(self, ip: str, *, retry: bool) -> None:
+        self.lookup_pending.discard(ip)
+        if retry:
+            self.lookup_retry_at[ip] = time.monotonic() + 1.0
+            self.set_lookup_status(ip, LookupStatus.PENDING)
+        else:
+            self.lookup_retry_at.pop(ip, None)
+
+    def note_lookup_missing(self, ip: str) -> None:
+        self.note_lookup_done(ip, retry=False)
+        self.set_lookup_status(ip, LookupStatus.MISSING)
+
+    def set_lookup_status(self, ip: str, status: LookupStatus) -> None:
+        if status != LookupStatus.UNKNOWN:
+            self.lookup_status[ip] = status
+        else:
+            self.lookup_status.pop(ip, None)
+        for hop in self.hops.values():
+            if hop.ip == ip:
+                hop.alloc_status = status
 
 
 def probe_keys(args: argparse.Namespace, fam: Family) -> list[ProbeKey]:
@@ -1164,34 +1244,45 @@ def note_hop_ip(args: argparse.Namespace, state: TraceState, jobs: AsyncJobs, ho
     hop.ip = ip
     cached_asn, cached_name = state.cached_allocation(ip)
     hop.asn, hop.as_name = cached_asn, cached_name
+    hop.alloc_status = state.lookup_status.get(ip, LookupStatus.UNKNOWN)
     if ip in state.ip_rdns_cache:
         hop.rdns = state.ip_rdns_cache[ip]
     elif is_global_ip(ip):
         hop.rdns = None
+        if ip not in state.rdns_submitted:
+            state.rdns_submitted.add(ip)
+            jobs.submit(reverse_dns, ip, apply=lambda hostname, ip=ip: state.apply_rdns(ip, hostname))
     else:
         hop.rdns = ""
 
-    if not is_global_ip(ip) or ip in state.lookup_ips or cached_asn or cached_name:
-        return
-
-    state.lookup_ips.add(ip)
-    jobs.submit(
-        allocation_lookup,
-        ip,
-        args.no_whois,
-        apply=lambda result, ip=ip: apply_allocation(state, ip, result),
-    )
-    jobs.submit(reverse_dns, ip, apply=lambda hostname, ip=ip: state.apply_rdns(ip, hostname))
-
 
 def apply_allocation(state: TraceState, ip: str, result: AllocationResult) -> None:
+    for route in result.routes:
+        if route in state.prefix_cache:
+            continue
+        state.prefix_cache.append(route)
+        for hop in state.hops.values():
+            if hop.ip and route.contains(hop.ip) and not state.ip_as_cache.get(hop.ip):
+                state.apply_asn(hop.ip, route.asn, route.name)
+
+    if result.temporary_failure:
+        state.note_lookup_done(ip, retry=True)
+        return
+    if result.no_entry:
+        if result.name:
+            state.apply_asn(ip, result.asn, result.name)
+        else:
+            state.note_lookup_missing(ip)
+        return
     if result.prefix and (result.asn or result.name):
         state.apply_prefix(result.prefix, result.asn, result.name)
+        state.note_lookup_done(ip, retry=False)
         return
     if result.asn or result.name:
         state.apply_asn(ip, result.asn, result.name)
+        state.note_lookup_done(ip, retry=False)
         return
-    state.lookup_ips.discard(ip)
+    state.note_lookup_done(ip, retry=True)
 
 
 def note_probe_reply(hop: HopStats, parts: list[str]) -> None:
@@ -1284,16 +1375,36 @@ class LiveRun:
             item = q.get(timeout=0.1)
         except queue.Empty:
             self.jobs.apply_done()
+            self.schedule_due_lookups()
             return active_procs
 
         if item is MTR_DONE:
             self.jobs.apply_done()
+            self.schedule_due_lookups()
             return active_procs - 1
 
         fam, raw_line = item
         process_mtr_line(self.args, self.state, self.jobs, fam, raw_line)
         self.jobs.apply_done()
+        self.schedule_due_lookups()
         return active_procs
+
+    def schedule_due_lookups(self) -> None:
+        if self.state.lookup_pending:
+            return
+        for ip in dict.fromkeys(hop.ip for hop in self.state.hops.values() if hop.ip):
+            if not is_global_ip(ip) or self.state.cached_allocation(ip) != ("", ""):
+                continue
+            if not self.state.should_lookup(ip):
+                continue
+            self.state.note_lookup_started(ip)
+            self.jobs.submit(
+                allocation_lookup,
+                ip,
+                self.args.no_whois,
+                apply=lambda result, ip=ip: apply_allocation(self.state, ip, result),
+            )
+            return
 
     def run_mtr(self, cmd: list[str], resolved: dict[Family, str]) -> list[subprocess.Popen[str]]:
         q: queue.Queue[tuple[Family, str] | object] = queue.Queue()
@@ -1312,10 +1423,13 @@ class LiveRun:
         return procs
 
     def drain_jobs(self) -> None:
-        while self.jobs:
+        while True:
             self.jobs.apply_done()
-            if self.jobs:
-                time.sleep(0.05)
+            self.schedule_due_lookups()
+            if not self.jobs:
+                return
+            self.render()
+            time.sleep(0.05)
 
 
 def run_live(args: argparse.Namespace, color: Color) -> int:
