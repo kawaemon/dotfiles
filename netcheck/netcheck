@@ -883,18 +883,22 @@ def probe_tcp(addr: str, port: int, timeout: float = 3.0) -> ProbeResult:
     except socket.timeout:
         return ProbeResult(rtt_ms=None)
     except OSError as exc:
-        return ProbeResult(rtt_ms=None, status=type(exc).__name__)
+        return ProbeResult(rtt_ms=None, status=os_error_status(exc))
+
+
+def os_error_status(exc: OSError) -> str:
+    return exc.strerror or str(exc) or type(exc).__name__
 
 
 def probe_udp(addr: str, family: Family, port: int, timeout: float = 3.0) -> ProbeResult:
     sock_fam = socket.AF_INET6 if family == Family.V6 else socket.AF_INET
     with socket.socket(sock_fam, socket.SOCK_DGRAM) as sock:
-        sock.settimeout(timeout)
-        # connect() is required for ICMP port-unreachable to surface as
-        # ConnectionRefusedError on BSD/macOS; unconnected sendto() silently drops it.
-        sock.connect((addr, port))
         try:
             t0 = time.monotonic()
+            sock.settimeout(timeout)
+            # connect() is required for ICMP port-unreachable to surface as
+            # ConnectionRefusedError on BSD/macOS; unconnected sendto() silently drops it.
+            sock.connect((addr, port))
             sock.send(b"netcheck")
             sock.recv(64)
             return ProbeResult(rtt_ms=(time.monotonic() - t0) * 1000, status="ok")
@@ -903,7 +907,7 @@ def probe_udp(addr: str, family: Family, port: int, timeout: float = 3.0) -> Pro
         except socket.timeout:
             return ProbeResult(rtt_ms=None)
         except OSError as exc:
-            return ProbeResult(rtt_ms=None, status=type(exc).__name__)
+            return ProbeResult(rtt_ms=None, status=os_error_status(exc))
 
 
 def _run_probe(key: ProbeKey, addr: str) -> ProbeResult:
