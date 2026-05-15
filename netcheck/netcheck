@@ -14,8 +14,10 @@ import subprocess
 import sys
 import threading
 import time
+import contextlib
+import io
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -839,20 +841,142 @@ def reverse_dns(ip: str) -> str:
         return ""
 
 
-def _resolve(host: str) -> dict[Family, str]:
-    result: dict[Family, str] = {}
-    for fam, sock_fam in ((Family.V4, socket.AF_INET), (Family.V6, socket.AF_INET6)):
-        try:
-            infos = socket.getaddrinfo(host, None, sock_fam, socket.SOCK_STREAM)
-            if infos:
-                addr = infos[0][4][0]
-                # Skip IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) returned for IPv4 literals
-                if fam == Family.V6 and ipaddress.IPv6Address(addr).ipv4_mapped is not None:
-                    continue
-                result[fam] = addr
-        except socket.gaierror:
-            pass
-    return result
+DNS_SOURCES: tuple[tuple[str, str | None, float], ...] = (
+    ("system", None, 1.5),
+    ("1.1.1.1", "1.1.1.1", 2.5),
+)
+
+
+def _system_resolve_one(host: str, family: Family) -> tuple[str | None, str]:
+    sock_fam = socket.AF_INET6 if family == Family.V6 else socket.AF_INET
+    try:
+        infos = socket.getaddrinfo(host, None, sock_fam, socket.SOCK_STREAM)
+    except (socket.gaierror, OSError) as exc:
+        return None, exc.strerror or "failed"
+    if not infos:
+        return None, "no result"
+    addr = infos[0][4][0]
+    if family == Family.V6 and ipaddress.IPv6Address(addr).ipv4_mapped is not None:
+        return None, "no result"
+    return addr, ""
+
+
+def _skip_dns_name(data: bytes, idx: int) -> int:
+    while idx < len(data):
+        b = data[idx]
+        if b == 0:
+            return idx + 1
+        if b & 0xc0:
+            return idx + 2
+        idx += b + 1
+    return idx
+
+
+def _dns_query(host: str, server: str, family: Family, timeout: float) -> tuple[str | None, str]:
+    qtype = 28 if family == Family.V6 else 1  # AAAA or A
+    tid = os.urandom(2)
+    header = tid + b"\x01\x00" + b"\x00\x01" + b"\x00\x00\x00\x00\x00\x00"
+    qname = b"".join(bytes([len(p)]) + p.encode() for p in host.split(".") if p) + b"\x00"
+    query = header + qname + qtype.to_bytes(2, "big") + b"\x00\x01"
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.settimeout(timeout)
+            sock.sendto(query, (server, 53))
+            data, _ = sock.recvfrom(4096)
+    except socket.timeout:
+        return None, "timeout"
+    except OSError as exc:
+        return None, exc.strerror or "failed"
+    if len(data) < 12 or data[:2] != tid:
+        return None, "bad response"
+    rcode = data[3] & 0x0f
+    if rcode != 0:
+        return None, f"rcode {rcode}"
+    ancount = int.from_bytes(data[6:8], "big")
+    if ancount == 0:
+        return None, "no result"
+    idx = _skip_dns_name(data, 12) + 4
+    for _ in range(ancount):
+        if idx >= len(data):
+            break
+        idx = _skip_dns_name(data, idx)
+        if idx + 10 > len(data):
+            break
+        atype = int.from_bytes(data[idx:idx+2], "big")
+        rdlen = int.from_bytes(data[idx+8:idx+10], "big")
+        idx += 10
+        if atype == qtype:
+            rdata = data[idx:idx+rdlen]
+            try:
+                if qtype == 1 and rdlen == 4:
+                    return str(ipaddress.IPv4Address(rdata)), ""
+                if qtype == 28 and rdlen == 16:
+                    return str(ipaddress.IPv6Address(rdata)), ""
+            except ValueError:
+                pass
+        idx += rdlen
+    return None, "no result"
+
+
+DnsResults = dict[tuple[str, Family], tuple[str | None, str]]
+
+
+def _resolve(
+    host: str,
+    on_result: Callable[[str, Family, str | None, str], None] | None = None,
+) -> tuple[dict[Family, str], DnsResults]:
+    results: DnsResults = {}
+    lock = threading.Lock()
+    pending: list[tuple[str, Family, float]] = []
+    for source, server, src_timeout in DNS_SOURCES:
+        for family in FAMILIES:
+            deadline = time.monotonic() + src_timeout
+            def work(source=source, server=server, family=family, src_timeout=src_timeout) -> None:
+                if server is None:
+                    addr, err = _system_resolve_one(host, family)
+                else:
+                    addr, err = _dns_query(host, server, family, src_timeout)
+                with lock:
+                    if (source, family) in results:
+                        return
+                    results[(source, family)] = (addr, err)
+                if on_result:
+                    on_result(source, family, addr, err)
+            threading.Thread(target=work, daemon=True).start()
+            pending.append((source, family, deadline))
+    while True:
+        now = time.monotonic()
+        with lock:
+            newly_timed_out = [
+                (s, f) for s, f, deadline in pending
+                if (s, f) not in results and now >= deadline
+            ]
+            for key in newly_timed_out:
+                results[key] = (None, "timeout")
+            ready = True
+            for family in FAMILIES:
+                has_addr = any(
+                    results.get((s, family), (None, ""))[0]
+                    for s, _, _ in DNS_SOURCES
+                )
+                all_finished = all((s, family) in results for s, _, _ in DNS_SOURCES)
+                if not (has_addr or all_finished):
+                    ready = False
+                    break
+        if on_result:
+            for s, f in newly_timed_out:
+                on_result(s, f, None, "timeout")
+        if ready:
+            break
+        time.sleep(0.05)
+    resolved: dict[Family, str] = {}
+    for family in FAMILIES:
+        for source, _, _ in DNS_SOURCES:
+            addr, _err = results.get((source, family), (None, ""))
+            if addr:
+                resolved[family] = addr
+                break
+    return resolved, results
 
 
 def probe_icmp(addr: str, family: Family, timeout: float = 3.0) -> ProbeResult:
@@ -991,6 +1115,25 @@ def pub_line(family: Family, entries: list[GwEntry], info: PubIpInfo, color: Col
     return f"pub: {color.cyan(pub_ip_text(info))}{pub_rdns_text(info)}{nat}"
 
 
+def print_dns_block(target: str, dns_results: DnsResults, color: Color) -> None:
+    if not dns_results:
+        return
+    print(f"{color.bold('dns')}: {target}")
+    for source, _, _ in DNS_SOURCES:
+        parts: list[str] = []
+        for family in FAMILIES:
+            entry = dns_results.get((source, family))
+            if entry is None:
+                continue
+            addr, err = entry
+            if addr:
+                parts.append(f"{family}={color.cyan(addr)}")
+            else:
+                parts.append(f"{family}={color.red(err or 'failed')}")
+        if parts:
+            print(f"  {source}: {'  '.join(parts)}")
+
+
 def print_gateway_block(gw: dict[Family, list[GwEntry]], pub_info: dict[Family, PubIpInfo], color: Color) -> None:
     print(f"{color.bold('gw')}:")
     for family in FAMILIES:
@@ -1090,6 +1233,7 @@ def render_live(
     done: bool = False,
     probes: dict[ProbeKey, ProbeResult | None] | None = None,
     pub_info: dict[Family, PubIpInfo] | None = None,
+    dns_results: DnsResults | None = None,
 ) -> None:
     visible_by_fam = visible_hops(hops)
     widths = render_widths([hop for fam_hops in visible_by_fam.values() for hop in fam_hops])
@@ -1098,6 +1242,8 @@ def render_live(
 
     status = color.green("done") if done else color.yellow("running")
     print(f"{color.bold('target')}: {target}  {color.bold('status')}: {status}")
+    if dns_results:
+        print_dns_block(target, dns_results, color)
     print_gateway_block(gw, pub_info or {fam: PubIpInfo() for fam in FAMILIES}, color)
     if probes:
         print_probe_block(probes, color)
@@ -1351,6 +1497,7 @@ class LiveRun:
     executor: Executor
     state: TraceState = field(default_factory=TraceState)
     gw: dict[Family, list[GwEntry]] = field(default_factory=local_gateway_info)
+    dns_results: DnsResults = field(default_factory=dict)
     jobs: AsyncJobs = field(init=False)
     clear: bool = field(init=False)
 
@@ -1372,6 +1519,7 @@ class LiveRun:
             done=done,
             probes=self.state.probes,
             pub_info=self.state.pub_info,
+            dns_results=self.dns_results,
         )
 
     def handle_mtr_item(self, q: queue.Queue[tuple[Family, str] | object], active_procs: int) -> int:
@@ -1436,24 +1584,71 @@ class LiveRun:
             time.sleep(0.05)
 
 
+@contextlib.contextmanager
+def alt_screen(enabled: bool) -> Iterator[None]:
+    if not enabled:
+        yield
+        return
+    sys.stdout.write("\033[?1049h\033[?25l")
+    sys.stdout.flush()
+    try:
+        yield
+    finally:
+        sys.stdout.write("\033[?25h\033[?1049l")
+        sys.stdout.flush()
+
+
+def _strip_clear(text: str) -> str:
+    return text.replace("\033[H\033[2J", "")
+
+
 def run_live(args: argparse.Namespace, color: Color) -> int:
     cmd = _build_mtr_cmd(_mtr_command_prefix(args), args, "-l")
-    resolved = _resolve(args.target)
+    print(f"{color.bold('resolving')} {args.target} ...", flush=True)
+    print_lock = threading.Lock()
+    dns_done = threading.Event()
+    src_w = max(len(s) for s, _, _ in DNS_SOURCES)
+
+    def on_dns_result(source: str, family: Family, addr: str | None, err: str) -> None:
+        if dns_done.is_set():
+            return
+        text = color.cyan(addr) if addr else color.red(err or "failed")
+        with print_lock:
+            if dns_done.is_set():
+                return
+            print(f"  {source.ljust(src_w)}  {family}: {text}", flush=True)
+
+    try:
+        resolved, dns_results = _resolve(args.target, on_result=on_dns_result)
+    finally:
+        with print_lock:
+            dns_done.set()
     if not resolved:
         print(f"netcheck: Could not resolve target {args.target}", file=sys.stderr)
+        for (source, family), (addr, err) in dns_results.items():
+            print(f"  {source} {family}: {addr or err or '-'}", file=sys.stderr)
         return 1
 
+    use_alt_screen = color.enabled and sys.stdout.isatty()
     with ThreadPoolExecutor(max_workers=8) as executor:
-        live = LiveRun(args=args, color=color, executor=executor)
-        live.start(resolved)
-        procs = live.run_mtr(cmd, resolved)
-        live.drain_jobs()
+        live = LiveRun(args=args, color=color, executor=executor, dns_results=dns_results)
+        with alt_screen(use_alt_screen):
+            live.start(resolved)
+            procs = live.run_mtr(cmd, resolved)
+            live.drain_jobs()
 
     returncode, stderr = _mtr_return_status(procs)
 
     for hop in live.state.hops.values():
         hop.note_losses()
-    live.render(done=True)
+    if use_alt_screen:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            live.render(done=True)
+        sys.stdout.write(_strip_clear(buf.getvalue()))
+        sys.stdout.flush()
+    else:
+        live.render(done=True)
     if returncode != 0:
         if stderr:
             print(f"mtr: {stderr.strip()}", file=sys.stderr)
@@ -1465,6 +1660,8 @@ def main() -> int:
     args = parse_args()
     try:
         return run_live(args, Color(use_color(args.color)))
+    except KeyboardInterrupt:
+        return 130
     except RuntimeError as exc:
         print(f"netcheck: {exc}", file=sys.stderr)
         return 1
