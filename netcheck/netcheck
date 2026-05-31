@@ -29,6 +29,7 @@ WHOIS_IANA = "whois.iana.org"
 WHOIS_QUERY_GAP_SEC = 0.0
 _LAST_WHOIS_QUERY_AT = 0.0
 _WHOIS_RATE_LOCK = threading.Lock()
+_STOP_EVENT = threading.Event()
 
 KNOWN_ASNS = {
     "174": "Cogent",
@@ -101,6 +102,7 @@ class LookupStatus(StrEnum):
 FAMILIES = (Family.V4, Family.V6)
 HopKey = tuple[Family, int]
 MTR_DONE = object()
+FIRST_HOP_INDEX = 0
 
 
 @dataclass
@@ -120,10 +122,18 @@ class AsyncJobs:
 
 
 @dataclass(frozen=True)
+class InterfaceMtu:
+    l2: int | None = None
+    v4: int | None = None
+    v6: int | None = None
+
+
+@dataclass(frozen=True)
 class GwEntry:
     dev: str = "-"
     us: str = "-"
     them: str = "-"
+    mtu: InterfaceMtu = field(default_factory=InterfaceMtu)
 
 
 @dataclass(frozen=True)
@@ -144,6 +154,29 @@ class ProbeResult:
     @property
     def reached(self) -> bool:
         return self.rtt_ms is not None
+
+
+@dataclass(frozen=True)
+class MtuAttempt:
+    ok: bool = False
+    too_big: bool = False
+    timeout: bool = False
+    status: str = "failed"
+
+
+@dataclass(frozen=True)
+class MtuResult:
+    mtu: int | None
+    status: str = "ok"
+    blackhole: bool = False
+
+
+@dataclass(frozen=True)
+class MtrMtuProbe:
+    reached: frozenset[int]
+    too_big: bool = False
+    timeout: bool = False
+    status: str = "ok"
 
 
 @dataclass(frozen=True)
@@ -213,6 +246,7 @@ class HopStats:
     alloc_status: LookupStatus = LookupStatus.UNKNOWN
     pending: set[str] | None = None
     rdns: str | None = None  # None=pending, ""=not found/private, else=hostname
+    mtu: MtuResult | None = None
 
     @property
     def avg_ms(self) -> float | None:
@@ -257,6 +291,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-n", "--no-whois", action="store_true", help="skip whois lookups")
     parser.add_argument("--tcp-port", type=int, default=443, help="TCP probe port")
     parser.add_argument("--udp-port", type=int, default=50000, help="UDP probe port")
+    parser.add_argument("--no-mtu", action="store_true", help="skip per-hop MTU discovery")
+    parser.add_argument("--mtu-timeout", type=float, default=0.8, help="MTU probe timeout seconds")
     parser.add_argument(
         "--sudo",
         choices=("auto", "always", "never"),
@@ -271,6 +307,8 @@ def parse_args() -> argparse.Namespace:
         args.count = 20 if privileged_mtr else 10
     if args.interval is None:
         args.interval = 0.2 if privileged_mtr else 1.0
+    if args.mtu_timeout <= 0:
+        parser.error("--mtu-timeout must be positive")
     return args
 
 
@@ -570,6 +608,36 @@ def run_text(cmd: list[str], timeout: float = 1.0) -> str:
     return proc.stdout
 
 
+def run_output(cmd: list[str], timeout: float = 1.0) -> tuple[int, str]:
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except OSError as exc:
+        return 127, os_error_status(exc)
+
+    deadline = time.monotonic() + timeout
+    while proc.poll() is None:
+        if _STOP_EVENT.is_set():
+            proc.terminate()
+            try:
+                stdout, stderr = proc.communicate(timeout=0.2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stdout, stderr = proc.communicate()
+            return 130, f"{stdout}\n{stderr}"
+        if time.monotonic() >= deadline:
+            proc.terminate()
+            try:
+                stdout, stderr = proc.communicate(timeout=0.2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stdout, stderr = proc.communicate()
+            return 124, f"{stdout}\n{stderr}"
+        time.sleep(0.05)
+
+    stdout, stderr = proc.communicate()
+    return proc.returncode or 0, f"{stdout}\n{stderr}"
+
+
 def add_unique(values: list[str], value: str) -> None:
     if value and value not in values:
         values.append(value)
@@ -699,6 +767,54 @@ def interface_addresses(dev: str) -> dict[Family, list[str]]:
     return out
 
 
+def parse_mtu_token(text: str) -> int | None:
+    match = re.search(r"\bmtu[:\s]+(\d+)\b", text, re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def read_int_file(path: str) -> int | None:
+    try:
+        with open(path, encoding="utf-8") as fp:
+            return int(fp.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def link_mtu(dev: str) -> int | None:
+    if not dev or dev == "-":
+        return None
+    linux = run_text(["ip", "-o", "link", "show", "dev", dev])
+    mtu = parse_mtu_token(linux)
+    if mtu:
+        return mtu
+    return parse_mtu_token(run_text(["ifconfig", dev]))
+
+
+def route_mtu(family: Family) -> int | None:
+    if sys.platform == "darwin":
+        cmd = ["route", "-n", "get", "default"]
+        if family == Family.V6:
+            cmd = ["route", "-n", "get", "-inet6", "default"]
+        return parse_mtu_token(run_text(cmd))
+
+    cmd = ["ip", "route", "get", "1.1.1.1"]
+    if family == Family.V6:
+        cmd = ["ip", "-6", "route", "get", "2606:4700:4700::1111"]
+    return parse_mtu_token(run_text(cmd))
+
+
+def interface_mtu(dev: str) -> InterfaceMtu:
+    l2 = link_mtu(dev)
+    v4 = route_mtu(Family.V4) or l2
+    v6 = route_mtu(Family.V6) or read_int_file(f"/proc/sys/net/ipv6/conf/{dev}/mtu") or l2
+    return InterfaceMtu(l2=l2, v4=v4, v6=v6)
+
+
 def pick_us(addrs: list[str], source: str) -> str:
     for addr in addrs:
         if addr.split("/", 1)[0] == source:
@@ -723,6 +839,7 @@ def local_gateway_info() -> dict[Family, list[GwEntry]]:
             dev=route.dev or "-",
             us=pick_us(addrs[family], src[family]) or "-",
             them=route.them or "-",
+            mtu=interface_mtu(route.dev) if route.dev else InterfaceMtu(),
         ))
     return out
 
@@ -777,6 +894,9 @@ class Color:
 
     def cyan(self, text: str) -> str:
         return self.paint(text, "36")
+
+    def magenta(self, text: str) -> str:
+        return self.paint(text, "35")
 
     def bold(self, text: str) -> str:
         return self.paint(text, "1")
@@ -845,6 +965,31 @@ DNS_SOURCES: tuple[tuple[str, str | None, float], ...] = (
     ("system", None, 1.5),
     ("1.1.1.1", "1.1.1.1", 2.5),
 )
+_SYSTEM_DNS_SERVERS: list[str] | None = None
+
+
+def system_dns_servers() -> list[str]:
+    global _SYSTEM_DNS_SERVERS
+    if _SYSTEM_DNS_SERVERS is not None:
+        return _SYSTEM_DNS_SERVERS
+
+    servers: list[str] = []
+    texts = [run_text(["scutil", "--dns"])] if sys.platform == "darwin" else []
+    texts.append(run_text(["cat", "/etc/resolv.conf"]))
+    for text in texts:
+        for line in text.splitlines():
+            match = re.search(r"\bnameserver(?:\[\d+\])?\s*[: ]\s*([0-9a-fA-F:.]+)", line)
+            if match:
+                add_unique(servers, match.group(1))
+    _SYSTEM_DNS_SERVERS = servers
+    return servers
+
+
+def dns_source_label(source: str) -> str:
+    if source != "system":
+        return source
+    servers = system_dns_servers()
+    return f"system ({servers[0]})" if servers else source
 
 
 def _system_resolve_one(host: str, family: Family) -> tuple[str | None, str]:
@@ -1034,6 +1179,197 @@ def probe_udp(addr: str, family: Family, port: int, timeout: float = 3.0) -> Pro
             return ProbeResult(rtt_ms=None, status=os_error_status(exc))
 
 
+def parse_mtu_attempt(returncode: int, text: str) -> MtuAttempt:
+    lower = text.lower()
+    reached_patterns = (
+        "time exceeded",
+        "time to live exceeded",
+        "hop limit exceeded",
+    )
+    if (
+        returncode == 0
+        and ("bytes from" in lower or re.search(r"time[=<][\d.]+", lower))
+    ) or any(pattern in lower for pattern in reached_patterns):
+        return MtuAttempt(ok=True, status="ok")
+
+    too_big_patterns = (
+        "message too long",
+        "packet too big",
+        "frag needed",
+        "fragmentation needed",
+        "needed and df set",
+        "sendmsg: message too long",
+    )
+    if any(pattern in lower for pattern in too_big_patterns):
+        return MtuAttempt(too_big=True, status="too-big")
+
+    timeout_patterns = (
+        "100.0% packet loss",
+        "100% packet loss",
+        "request timeout",
+        "no answer",
+    )
+    if returncode == 124 or any(pattern in lower for pattern in timeout_patterns):
+        return MtuAttempt(timeout=True, status="timeout")
+
+    first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    return MtuAttempt(status=first_line or "failed")
+
+
+def mtr_mtu_cmd(
+    prefix: list[str],
+    family: Family,
+    packet_size: int,
+    timeout: float,
+    addr: str,
+    max_hops: int = 30,
+) -> list[str]:
+    family_flag = "-6" if family == Family.V6 else "-4"
+    return [
+        *prefix,
+        family_flag,
+        "-u",
+        "-l",
+        "-n",
+        "-c",
+        "1",
+        "-i",
+        "0.05",
+        "-G",
+        str(timeout),
+        "-m",
+        str(max_hops),
+        "-s",
+        str(packet_size),
+        addr,
+    ]
+
+
+def parse_mtr_reached_hops(text: str) -> frozenset[int]:
+    reached: set[int] = set()
+    for raw_line in text.splitlines():
+        parts = raw_line.strip().split()
+        if len(parts) < 2 or parts[0] not in {"h", "p"}:
+            continue
+        try:
+            reached.add(int(parts[1]))
+        except ValueError:
+            pass
+    return frozenset(reached)
+
+
+def run_mtr_mtu_probe(
+    prefix: list[str],
+    family: Family,
+    addr: str,
+    packet_size: int,
+    timeout: float = 0.8,
+    attempts: int = 3,
+    first_hop_attempts: int = 10,
+) -> MtrMtuProbe:
+    reached: set[int] = set()
+    too_big = False
+    timed_out = False
+    status = "timeout"
+    proc_timeout = max(1.0, timeout + 0.7)
+
+    def run_once() -> tuple[int, str, MtuAttempt, frozenset[int]]:
+        cmd = mtr_mtu_cmd(prefix, family, packet_size, timeout, addr)
+        returncode, text = run_output(cmd, timeout=proc_timeout)
+        attempt = parse_mtu_attempt(returncode, text)
+        return returncode, text, attempt, parse_mtr_reached_hops(text)
+
+    for _ in range(attempts):
+        if _STOP_EVENT.is_set():
+            break
+        returncode, _text, attempt, attempt_reached = run_once()
+        reached.update(attempt_reached)
+        too_big = too_big or attempt.too_big
+        timed_out = timed_out or returncode == 124
+        status = attempt.status
+
+    for _ in range(max(0, first_hop_attempts - attempts)):
+        if _STOP_EVENT.is_set() or FIRST_HOP_INDEX in reached:
+            break
+        returncode, _text, attempt, attempt_reached = run_once()
+        if FIRST_HOP_INDEX in attempt_reached:
+            reached.add(FIRST_HOP_INDEX)
+        too_big = too_big or attempt.too_big
+        timed_out = timed_out or returncode == 124
+        status = attempt.status
+
+    return MtrMtuProbe(
+        reached=frozenset(reached),
+        too_big=too_big,
+        timeout=timed_out,
+        status=status,
+    )
+
+
+def discover_initial_mtu_map(
+    prefix: list[str],
+    family: Family,
+    addr: str,
+    max_packet: int,
+    timeout: float,
+) -> dict[int, MtuResult]:
+    probe = run_mtr_mtu_probe(prefix, family, addr, max_packet, timeout)
+    return {hop: MtuResult(mtu=max_packet) for hop in probe.reached}
+
+
+def discover_mtu_map(
+    prefix: list[str],
+    family: Family,
+    addr: str,
+    max_packet: int = 1500,
+    timeout: float = 0.8,
+) -> dict[int, MtuResult]:
+    if _STOP_EVENT.is_set():
+        return {}
+    small_packet = min(128, max_packet)
+    baseline = run_mtr_mtu_probe(prefix, family, addr, small_packet, timeout)
+    if not baseline.reached:
+        return {}
+
+    results: dict[int, MtuResult] = {}
+    low = {hop: small_packet for hop in baseline.reached}
+    high = {hop: max_packet for hop in baseline.reached}
+    top = run_mtr_mtu_probe(prefix, family, addr, max_packet, timeout)
+
+    for hop in baseline.reached:
+        if hop in top.reached:
+            results[hop] = MtuResult(mtu=max_packet)
+            low.pop(hop, None)
+            high.pop(hop, None)
+        else:
+            high[hop] = max_packet - 1
+
+    while low:
+        if _STOP_EVENT.is_set():
+            return results
+        mids = sorted({(low[hop] + high[hop] + 1) // 2 for hop in low})
+        for mid in mids:
+            if _STOP_EVENT.is_set():
+                return results
+            probe = run_mtr_mtu_probe(prefix, family, addr, mid, timeout)
+            for hop in list(low):
+                if (low[hop] + high[hop] + 1) // 2 != mid:
+                    continue
+                if hop in probe.reached:
+                    low[hop] = mid
+                else:
+                    high[hop] = mid - 1
+                if low[hop] >= high[hop]:
+                    results[hop] = MtuResult(
+                        mtu=low[hop],
+                        blackhole=hop not in top.reached and not top.too_big,
+                    )
+                    low.pop(hop, None)
+                    high.pop(hop, None)
+
+    return results
+
+
 def _run_probe(key: ProbeKey, addr: str) -> ProbeResult:
     match key.proto:
         case Proto.ICMP:
@@ -1115,11 +1451,45 @@ def pub_line(family: Family, entries: list[GwEntry], info: PubIpInfo, color: Col
     return f"pub: {color.cyan(pub_ip_text(info))}{pub_rdns_text(info)}{nat}"
 
 
+def color_mtu_value(value: int | None, color: Color) -> str:
+    if value is None:
+        return color.dim("-")
+    text = str(value)
+    return color.cyan(text) if value == 1500 else color.yellow(text)
+
+
+def mtu_summary(mtu: InterfaceMtu, color: Color) -> str:
+    return (
+        f"l2={color_mtu_value(mtu.l2, color)} "
+        f"ipv4={color_mtu_value(mtu.v4, color)} "
+        f"ipv6={color_mtu_value(mtu.v6, color)}"
+    )
+
+
+def print_interface_mtu_block(gw: dict[Family, list[GwEntry]], color: Color) -> None:
+    seen: set[str] = set()
+    for family in FAMILIES:
+        for entry in gw.get(family) or []:
+            if entry.dev == "-" or entry.dev in seen:
+                continue
+            seen.add(entry.dev)
+            print(f"  if: {color.cyan(entry.dev)}, mtu: {mtu_summary(entry.mtu, color)}")
+
+
+def color_gateway_them(family: Family, them: str, color: Color) -> str:
+    if family == Family.V6 and "%" in them:
+        addr, iface = them.rsplit("%", 1)
+        if ip_special_purpose(addr) == "Link-Local":
+            return f"{color.cyan(addr)}%{color.magenta(iface)}"
+    return color.cyan(them)
+
+
 def print_dns_block(target: str, dns_results: DnsResults, color: Color) -> None:
     if not dns_results:
         return
     print(f"{color.bold('dns')}: {target}")
     for source, _, _ in DNS_SOURCES:
+        label = dns_source_label(source)
         parts: list[str] = []
         for family in FAMILIES:
             entry = dns_results.get((source, family))
@@ -1131,11 +1501,12 @@ def print_dns_block(target: str, dns_results: DnsResults, color: Color) -> None:
             else:
                 parts.append(f"{family}={color.red(err or 'failed')}")
         if parts:
-            print(f"  {source}: {'  '.join(parts)}")
+            print(f"  {label}: {'  '.join(parts)}")
 
 
 def print_gateway_block(gw: dict[Family, list[GwEntry]], pub_info: dict[Family, PubIpInfo], color: Color) -> None:
     print(f"{color.bold('gw')}:")
+    print_interface_mtu_block(gw, color)
     for family in FAMILIES:
         entries = gw.get(family) or []
         pub_str = pub_line(family, entries, pub_info.get(family, PubIpInfo()), color)
@@ -1148,7 +1519,7 @@ def print_gateway_block(gw: dict[Family, list[GwEntry]], pub_info: dict[Family, 
                 f"  {family}: "
                 f"dev: {color.cyan(entry.dev)}, "
                 f"us: {color.cyan(entry.us)}, "
-                f"them: {color.cyan(entry.them)}"
+                f"them: {color_gateway_them(family, entry.them, color)}"
             )
             if i == 0:
                 print(f"      {pub_str}")
@@ -1157,14 +1528,45 @@ def print_gateway_block(gw: dict[Family, list[GwEntry]], pub_info: dict[Family, 
 @dataclass(frozen=True)
 class RenderWidths:
     ip: int
+    mtu: int
     as_alloc: int
     rdns: int
 
 
-def render_widths(hops: list[HopStats]) -> RenderWidths:
+def _mtu_plain(hop: HopStats, previous_mtu: int | None) -> str:
+    if not hop.ip:
+        return "-"
+    if hop.mtu is None:
+        return "..."
+    if hop.mtu.mtu is None:
+        return "?"
+
+    text = str(hop.mtu.mtu)
+    if previous_mtu is not None and hop.mtu.mtu < previous_mtu:
+        text += "!"
+    if hop.mtu.blackhole:
+        text += " bh?"
+    return text
+
+
+def _format_mtu(hop: HopStats, previous_mtu: int | None, color: Color, width: int = 0) -> str:
+    text = _mtu_plain(hop, previous_mtu).rjust(width)
+    if hop.mtu is None:
+        return color.dim(text)
+    if hop.mtu.mtu is None:
+        return color.red(text)
+    if hop.mtu.blackhole:
+        return color.red(text)
+    if previous_mtu is not None and hop.mtu.mtu < previous_mtu:
+        return color.yellow(text)
+    return text
+
+
+def render_widths(hops: list[HopStats], mtu_enabled: bool) -> RenderWidths:
     rdns = max((len(_rdns_display(hop)) for hop in hops if hop.ip), default=0)
     return RenderWidths(
         ip=max((len(hop.ip or "-") for hop in hops), default=15),
+        mtu=9 if mtu_enabled else 0,
         as_alloc=max(max((len(get_as_alloc_str(hop)) for hop in hops if hop.ip), default=13), 13),
         rdns=max(rdns, 4) if rdns > 0 else 0,
     )
@@ -1195,17 +1597,20 @@ def print_probe_block(probes: dict[ProbeKey, ProbeResult | None], color: Color) 
 
 
 def trace_header(widths: RenderWidths) -> str:
+    mtu = f" {'mtu':>{widths.mtu}}" if widths.mtu > 0 else ""
     rdns = f" {'rdns'.ljust(widths.rdns)}" if widths.rdns > 0 else ""
-    return f"{'hop':>3} {'loss':>7} {'snt':>4} {'best':>8} {'ip':<{widths.ip}} {'as/allocation':<{widths.as_alloc}}{rdns}"
+    return f"{'hop':>3} {'loss':>7} {'snt':>4} {'best':>8}{mtu} {'ip':<{widths.ip}} {'as/allocation':<{widths.as_alloc}}{rdns}"
 
 
-def print_trace_row(hop: HopStats, widths: RenderWidths, color: Color) -> None:
+def print_trace_row(hop: HopStats, widths: RenderWidths, color: Color, previous_mtu: int | None = None) -> None:
+    mtu_col = f" {_format_mtu(hop, previous_mtu, color, widths.mtu)}" if widths.mtu > 0 else ""
     rdns_col = f" {_rdns_display(hop)}" if widths.rdns > 0 else ""
     print(
         f"{hop.index + 1:>3} "
         f"{color_loss(hop.loss_pct, color, 7)} "
         f"{hop.sent:>4} "
-        f"{color_latency(hop.best_ms, color, 8)} "
+        f"{color_latency(hop.best_ms, color, 8)}"
+        f"{mtu_col} "
         f"{color.cyan((hop.ip or '-').ljust(widths.ip))} "
         f"{_format_as_alloc(hop, color, widths.as_alloc)}"
         f"{rdns_col}"
@@ -1219,8 +1624,11 @@ def print_trace_blocks(visible_by_fam: dict[Family, list[HopStats]], widths: Ren
             continue
         print(color.bold(f"trace {fam}:"))
         print(header)
+        previous_mtu: int | None = None
         for hop in visible_by_fam[fam]:
-            print_trace_row(hop, widths, color)
+            print_trace_row(hop, widths, color, previous_mtu)
+            if hop.mtu and hop.mtu.mtu is not None:
+                previous_mtu = hop.mtu.mtu
 
 
 def render_live(
@@ -1234,9 +1642,10 @@ def render_live(
     probes: dict[ProbeKey, ProbeResult | None] | None = None,
     pub_info: dict[Family, PubIpInfo] | None = None,
     dns_results: DnsResults | None = None,
+    mtu_enabled: bool = False,
 ) -> None:
     visible_by_fam = visible_hops(hops)
-    widths = render_widths([hop for fam_hops in visible_by_fam.values() for hop in fam_hops])
+    widths = render_widths([hop for fam_hops in visible_by_fam.values() for hop in fam_hops], mtu_enabled)
     if clear:
         print("\033[H\033[2J", end="")
 
@@ -1262,6 +1671,7 @@ class TraceState:
     lookup_status: dict[str, LookupStatus] = field(default_factory=dict)
     ip_as_cache: dict[str, tuple[str, str]] = field(default_factory=dict)
     ip_rdns_cache: dict[str, str] = field(default_factory=dict)
+    mtu_cache: dict[HopKey, MtuResult] = field(default_factory=dict)
     rdns_submitted: set[str] = field(default_factory=set)
     prefix_cache: list[PrefixAllocation] = field(default_factory=list)
 
@@ -1299,6 +1709,16 @@ class TraceState:
         for hop in self.hops.values():
             if hop.ip == ip:
                 hop.rdns = hostname
+
+    def apply_mtu(self, key: HopKey, result: MtuResult) -> None:
+        self.mtu_cache[key] = result
+        hop = self.hops.get(key)
+        if hop:
+            hop.mtu = result
+
+    def apply_mtu_map(self, family: Family, results: dict[int, MtuResult]) -> None:
+        for index, result in results.items():
+            self.apply_mtu((family, index), result)
 
     def should_lookup(self, ip: str) -> bool:
         if self.lookup_status.get(ip) == LookupStatus.MISSING:
@@ -1344,6 +1764,8 @@ def probe_keys(args: argparse.Namespace, fam: Family) -> list[ProbeKey]:
 
 
 def start_public_ip_checks(state: TraceState, jobs: AsyncJobs) -> None:
+    if _STOP_EVENT.is_set():
+        return
     for fam in FAMILIES:
         jobs.submit(fetch_pub_ip, fam, apply=lambda result, fam=fam: apply_public_ip(state, jobs, fam, result[1]))
 
@@ -1362,13 +1784,55 @@ def apply_public_rdns(state: TraceState, fam: Family, ip: str, hostname: str) ->
 
 
 def start_probes(args: argparse.Namespace, state: TraceState, jobs: AsyncJobs, resolved: dict[Family, str]) -> None:
+    if _STOP_EVENT.is_set():
+        return
     for fam, addr in resolved.items():
         for key in probe_keys(args, fam):
             state.probes[key] = None
             jobs.submit(_run_probe, key, addr, apply=lambda result, key=key: state.probes.__setitem__(key, result))
 
 
-def process_mtr_line(args: argparse.Namespace, state: TraceState, jobs: AsyncJobs, fam: Family, raw_line: str) -> None:
+def start_mtu_checks(
+    args: argparse.Namespace,
+    state: TraceState,
+    jobs: AsyncJobs,
+    prefix: list[str],
+    resolved: dict[Family, str],
+    mtu_limit: Callable[[Family], int | None],
+) -> None:
+    if args.no_mtu:
+        return
+    for fam, addr in resolved.items():
+        limit = mtu_limit(fam)
+        if limit is None or limit < 128:
+            continue
+        jobs.submit(
+            discover_initial_mtu_map,
+            prefix,
+            fam,
+            addr,
+            limit,
+            args.mtu_timeout,
+            apply=lambda result, fam=fam: state.apply_mtu_map(fam, result),
+        )
+        jobs.submit(
+            discover_mtu_map,
+            prefix,
+            fam,
+            addr,
+            limit,
+            args.mtu_timeout,
+            apply=lambda result, fam=fam: state.apply_mtu_map(fam, result),
+        )
+
+
+def process_mtr_line(
+    args: argparse.Namespace,
+    state: TraceState,
+    jobs: AsyncJobs,
+    fam: Family,
+    raw_line: str,
+) -> None:
     parts = raw_line.strip().split()
     if len(parts) < 3:
         return
@@ -1390,7 +1854,13 @@ def process_mtr_line(args: argparse.Namespace, state: TraceState, jobs: AsyncJob
             note_probe_reply(hop, parts)
 
 
-def note_hop_ip(args: argparse.Namespace, state: TraceState, jobs: AsyncJobs, hop: HopStats, ip: str) -> None:
+def note_hop_ip(
+    args: argparse.Namespace,
+    state: TraceState,
+    jobs: AsyncJobs,
+    hop: HopStats,
+    ip: str,
+) -> None:
     hop.ip = ip
     cached_asn, cached_name = state.cached_allocation(ip)
     hop.asn, hop.as_name = cached_asn, cached_name
@@ -1404,6 +1874,9 @@ def note_hop_ip(args: argparse.Namespace, state: TraceState, jobs: AsyncJobs, ho
             jobs.submit(reverse_dns, ip, apply=lambda hostname, ip=ip: state.apply_rdns(ip, hostname))
     else:
         hop.rdns = ""
+    key = (hop.family, hop.index)
+    if key in state.mtu_cache:
+        hop.mtu = state.mtu_cache[key]
 
 
 def apply_allocation(state: TraceState, ip: str, result: AllocationResult) -> None:
@@ -1495,9 +1968,11 @@ class LiveRun:
     args: argparse.Namespace
     color: Color
     executor: Executor
+    mtr_prefix: list[str]
     state: TraceState = field(default_factory=TraceState)
     gw: dict[Family, list[GwEntry]] = field(default_factory=local_gateway_info)
     dns_results: DnsResults = field(default_factory=dict)
+    resolved: dict[Family, str] = field(default_factory=dict)
     jobs: AsyncJobs = field(init=False)
     clear: bool = field(init=False)
 
@@ -1506,8 +1981,20 @@ class LiveRun:
         self.clear = self.color.enabled and sys.stdout.isatty()
 
     def start(self, resolved: dict[Family, str]) -> None:
+        self.resolved = resolved
         start_public_ip_checks(self.state, self.jobs)
         start_probes(self.args, self.state, self.jobs, resolved)
+        start_mtu_checks(self.args, self.state, self.jobs, self.mtr_prefix, resolved, self.mtu_limit)
+
+    def mtu_enabled(self) -> bool:
+        return not self.args.no_mtu and any(self.mtu_limit(fam) is not None for fam in FAMILIES)
+
+    def mtu_limit(self, family: Family) -> int | None:
+        entries = self.gw.get(family) or []
+        if not entries:
+            return None
+        mtu = entries[0].mtu
+        return mtu.v6 if family == Family.V6 else mtu.v4
 
     def render(self, *, done: bool = False) -> None:
         render_live(
@@ -1520,6 +2007,7 @@ class LiveRun:
             probes=self.state.probes,
             pub_info=self.state.pub_info,
             dns_results=self.dns_results,
+            mtu_enabled=self.mtu_enabled(),
         )
 
     def handle_mtr_item(self, q: queue.Queue[tuple[Family, str] | object], active_procs: int) -> int:
@@ -1542,6 +2030,8 @@ class LiveRun:
         return active_procs
 
     def schedule_due_lookups(self) -> None:
+        if _STOP_EVENT.is_set():
+            return
         if self.state.lookup_pending:
             return
         for ip in dict.fromkeys(hop.ip for hop in self.state.hops.values() if hop.ip):
@@ -1568,14 +2058,18 @@ class LiveRun:
                 active_procs = self.handle_mtr_item(q, active_procs)
                 self.render()
         except KeyboardInterrupt:
+            _STOP_EVENT.set()
             for proc in procs:
                 proc.terminate()
+            raise
         finally:
             _finish_processes(procs)
         return procs
 
     def drain_jobs(self) -> None:
         while True:
+            if _STOP_EVENT.is_set():
+                return
             self.jobs.apply_done()
             self.schedule_due_lookups()
             if not self.jobs:
@@ -1603,11 +2097,13 @@ def _strip_clear(text: str) -> str:
 
 
 def run_live(args: argparse.Namespace, color: Color) -> int:
-    cmd = _build_mtr_cmd(_mtr_command_prefix(args), args, "-l")
+    mtr_prefix = _mtr_command_prefix(args)
+    cmd = _build_mtr_cmd(mtr_prefix, args, "-l")
     print(f"{color.bold('resolving')} {args.target} ...", flush=True)
     print_lock = threading.Lock()
     dns_done = threading.Event()
-    src_w = max(len(s) for s, _, _ in DNS_SOURCES)
+    dns_labels = {source: dns_source_label(source) for source, _, _ in DNS_SOURCES}
+    src_w = max(len(label) for label in dns_labels.values())
 
     def on_dns_result(source: str, family: Family, addr: str | None, err: str) -> None:
         if dns_done.is_set():
@@ -1616,7 +2112,7 @@ def run_live(args: argparse.Namespace, color: Color) -> int:
         with print_lock:
             if dns_done.is_set():
                 return
-            print(f"  {source.ljust(src_w)}  {family}: {text}", flush=True)
+            print(f"  {dns_labels[source].ljust(src_w)}  {family}: {text}", flush=True)
 
     try:
         resolved, dns_results = _resolve(args.target, on_result=on_dns_result)
@@ -1626,16 +2122,25 @@ def run_live(args: argparse.Namespace, color: Color) -> int:
     if not resolved:
         print(f"netcheck: Could not resolve target {args.target}", file=sys.stderr)
         for (source, family), (addr, err) in dns_results.items():
-            print(f"  {source} {family}: {addr or err or '-'}", file=sys.stderr)
+            print(f"  {dns_labels[source]} {family}: {addr or err or '-'}", file=sys.stderr)
         return 1
 
     use_alt_screen = color.enabled and sys.stdout.isatty()
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        live = LiveRun(args=args, color=color, executor=executor, dns_results=dns_results)
+    executor = ThreadPoolExecutor(max_workers=8)
+    try:
+        live = LiveRun(args=args, color=color, executor=executor, mtr_prefix=mtr_prefix, dns_results=dns_results)
         with alt_screen(use_alt_screen):
             live.start(resolved)
             procs = live.run_mtr(cmd, resolved)
             live.drain_jobs()
+    except KeyboardInterrupt:
+        _STOP_EVENT.set()
+        executor.shutdown(wait=False, cancel_futures=True)
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+        os._exit(130)
+    else:
+        executor.shutdown(wait=True)
 
     returncode, stderr = _mtr_return_status(procs)
 
