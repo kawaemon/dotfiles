@@ -116,7 +116,6 @@ class LookupStatus(StrEnum):
 FAMILIES = (Family.V4, Family.V6)
 HopKey = tuple[Family, int]
 MTR_DONE = object()
-FIRST_HOP_INDEX = 0
 WHOIS_LOOKUP_MAX_ATTEMPTS = 2
 TAILSCALE_DNS_SERVERS = frozenset({"100.100.100.100", "fd7a:115c:a1e0::53"})
 # MTU probing is intentionally opportunistic: the main mtr run owns path
@@ -1334,9 +1333,6 @@ class MtrMtuDiscoverer:
             return timeout
         return max(0.1, min(timeout, self.deadline - time.monotonic()))
 
-    def timed_out_result(self, hops: set[int] | dict[int, int]) -> dict[int, MtuResult]:
-        return {hop: MtuResult(mtu=None, status="timeout") for hop in hops}
-
     def cmd(self, packet_size: int, ttl: int) -> list[str]:
         family_flag = "-6" if self.family == Family.V6 else "-4"
         return [
@@ -1393,38 +1389,35 @@ class MtrMtuDiscoverer:
     def hop_allows(self, hop_index: int, packet_size: int) -> bool:
         return hop_index in self.probe_hop(packet_size, hop_index).reached
 
+    def publish_result(self, hop_index: int, mtu: int | None, status: str = "ok") -> MtuResult:
+        result = MtuResult(mtu=mtu, status=status)
+        self.note_progress(hop_index, result)
+        return result
+
     def find_hop_mtu(self, hop_index: int) -> MtuResult:
         if _STOP_EVENT.is_set() or self.timed_out():
             return MtuResult(mtu=None, status="timeout")
         small_packet = min(MTU_MIN_PACKET, self.max_packet)
         if not self.hop_allows(hop_index, small_packet):
-            result = MtuResult(mtu=None, status=f"<{small_packet}")
-            self.note_progress(hop_index, result)
-            return result
-        self.note_progress(hop_index, MtuResult(mtu=small_packet, status="probing"))
+            return self.publish_result(hop_index, None, f"<{small_packet}")
+        self.publish_result(hop_index, small_packet, "probing")
         if self.hop_allows(hop_index, self.max_packet):
-            result = MtuResult(mtu=self.max_packet)
-            self.note_progress(hop_index, result)
-            return result
+            return self.publish_result(hop_index, self.max_packet)
 
         low = small_packet
         high = self.max_packet - 1
         while low < high:
             if _STOP_EVENT.is_set() or self.timed_out():
-                result = MtuResult(mtu=None, status="timeout")
-                self.note_progress(hop_index, result)
-                return result
+                return self.publish_result(hop_index, None, "timeout")
             mid = (low + high + 1) // 2
             if self.hop_allows(hop_index, mid):
                 low = mid
                 # Publish the current lower bound during the binary search so
                 # the live table shows progress before the hop is finalized.
-                self.note_progress(hop_index, MtuResult(mtu=low, status="probing"))
+                self.publish_result(hop_index, low, "probing")
             else:
                 high = mid - 1
-        result = MtuResult(mtu=low)
-        self.note_progress(hop_index, result)
-        return result
+        return self.publish_result(hop_index, low)
 
     def note_progress(self, hop_index: int, result: MtuResult) -> None:
         if self.progress:
@@ -1630,7 +1623,8 @@ def _mtu_plain(hop: HopStats, previous_mtu: int | None) -> str:
         return hop.mtu.status or "?"
 
     text = f">={hop.mtu.mtu}" if hop.mtu.status in {"inferred", "probing"} else str(hop.mtu.mtu)
-    if previous_mtu is not None and hop.mtu.mtu < previous_mtu:
+    is_lower_bound = hop.mtu.status in {"inferred", "probing"}
+    if previous_mtu is not None and hop.mtu.mtu < previous_mtu and not is_lower_bound:
         text += "!"
     if hop.mtu.blackhole:
         text += " bh?"
@@ -1782,22 +1776,92 @@ def render_live(
 
 
 @dataclass
+class AllocationState:
+    by_ip: dict[str, tuple[str, str]] = field(default_factory=dict)
+    prefixes: list[PrefixAllocation] = field(default_factory=list)
+
+    def cached(self, ip: str) -> tuple[str, str]:
+        if ip in self.by_ip:
+            return self.by_ip[ip]
+        route = best_prefix_match(self.prefixes, ip)
+        if not route:
+            return "", ""
+        self.by_ip[ip] = (route.asn, route.name)
+        return route.asn, route.name
+
+    def remember_prefix(self, route: PrefixAllocation) -> None:
+        if route not in self.prefixes:
+            self.prefixes.append(route)
+
+
+@dataclass
+class RdnsState:
+    cache: dict[str, str] = field(default_factory=dict)
+    submitted: set[str] = field(default_factory=set)
+
+
+@dataclass
+class MtuState:
+    cache: dict[HopKey, MtuResult] = field(default_factory=dict)
+
+
+@dataclass
+class PublicIpState:
+    info: dict[Family, PubIpInfo] = field(default_factory=lambda: {fam: PubIpInfo() for fam in FAMILIES})
+
+
+@dataclass
+class LookupState:
+    pending: set[str] = field(default_factory=set)
+    retry_at: dict[str, float] = field(default_factory=dict)
+    attempts: dict[str, int] = field(default_factory=dict)
+    status: dict[str, LookupStatus] = field(default_factory=dict)
+
+    def should_start(self, ip: str) -> bool:
+        if self.status.get(ip) == LookupStatus.MISSING:
+            return False
+        if ip in self.pending:
+            return False
+        retry_at = self.retry_at.get(ip)
+        return retry_at is None or time.monotonic() >= retry_at
+
+    def started(self, ip: str) -> LookupStatus:
+        self.pending.add(ip)
+        self.attempts[ip] = self.attempts.get(ip, 0) + 1
+        return LookupStatus.PENDING
+
+    def done(self, ip: str, *, retry: bool) -> LookupStatus:
+        self.pending.discard(ip)
+        if retry:
+            self.retry_at[ip] = time.monotonic() + 1.0
+            return LookupStatus.PENDING
+        self.retry_at.pop(ip, None)
+        self.attempts.pop(ip, None)
+        return LookupStatus.UNKNOWN
+
+    def missing(self, ip: str) -> LookupStatus:
+        self.done(ip, retry=False)
+        return LookupStatus.MISSING
+
+    def set_status(self, ip: str, status: LookupStatus) -> None:
+        if status != LookupStatus.UNKNOWN:
+            self.status[ip] = status
+        else:
+            self.status.pop(ip, None)
+
+
+@dataclass
 class TraceState:
     hops: dict[HopKey, HopStats] = field(default_factory=dict)
     probes: dict[ProbeKey, ProbeResult | None] = field(default_factory=dict)
-    pub_info: dict[Family, PubIpInfo] = field(default_factory=lambda: {fam: PubIpInfo() for fam in FAMILIES})
-    lookup_pending: set[str] = field(default_factory=set)
-    lookup_retry_at: dict[str, float] = field(default_factory=dict)
-    lookup_attempts: dict[str, int] = field(default_factory=dict)
-    lookup_status: dict[str, LookupStatus] = field(default_factory=dict)
-    ip_as_cache: dict[str, tuple[str, str]] = field(default_factory=dict)
-    ip_rdns_cache: dict[str, str] = field(default_factory=dict)
-    mtu_cache: dict[HopKey, MtuResult] = field(default_factory=dict)
-    rdns_submitted: set[str] = field(default_factory=set)
-    prefix_cache: list[PrefixAllocation] = field(default_factory=list)
+    public: PublicIpState = field(default_factory=PublicIpState)
+    allocation: AllocationState = field(default_factory=AllocationState)
+    lookup: LookupState = field(default_factory=LookupState)
+    rdns: RdnsState = field(default_factory=RdnsState)
+    mtu: MtuState = field(default_factory=MtuState)
 
     def apply_asn(self, ip: str, asn: str, as_name: str) -> None:
-        self.ip_as_cache[ip] = (asn, as_name)
+        self.allocation.by_ip[ip] = (asn, as_name)
         self.set_lookup_status(ip, LookupStatus.UNKNOWN)
         for hop in self.hops.values():
             if hop.ip == ip:
@@ -1810,29 +1874,29 @@ class TraceState:
         except ValueError:
             return
         route = PrefixAllocation(network=network, asn=asn, name=as_name)
-        if route not in self.prefix_cache:
-            self.prefix_cache.append(route)
+        self.allocation.remember_prefix(route)
         for hop in self.hops.values():
             if hop.ip and route.contains(hop.ip):
                 self.apply_asn(hop.ip, route.asn, route.name)
 
     def cached_allocation(self, ip: str) -> tuple[str, str]:
-        if ip in self.ip_as_cache:
-            return self.ip_as_cache[ip]
-        route = best_prefix_match(self.prefix_cache, ip)
-        if not route:
-            return "", ""
-        self.apply_asn(ip, route.asn, route.name)
-        return route.asn, route.name
+        asn, name = self.allocation.cached(ip)
+        if asn or name:
+            self.set_lookup_status(ip, LookupStatus.UNKNOWN)
+            for hop in self.hops.values():
+                if hop.ip == ip:
+                    hop.asn = asn
+                    hop.as_name = name
+        return asn, name
 
     def apply_rdns(self, ip: str, hostname: str) -> None:
-        self.ip_rdns_cache[ip] = hostname
+        self.rdns.cache[ip] = hostname
         for hop in self.hops.values():
             if hop.ip == ip:
                 hop.rdns = hostname
 
     def apply_mtu(self, key: HopKey, result: MtuResult) -> None:
-        self.mtu_cache[key] = result
+        self.mtu.cache[key] = result
         hop = self.hops.get(key)
         if hop:
             hop.mtu = result
@@ -1844,14 +1908,14 @@ class TraceState:
     def note_hop_ip(self, hop: HopStats, ip: str, jobs: AsyncJobs) -> None:
         hop.ip = ip
         hop.asn, hop.as_name = self.cached_allocation(ip)
-        hop.alloc_status = self.lookup_status.get(ip, LookupStatus.UNKNOWN)
+        hop.alloc_status = self.lookup.status.get(ip, LookupStatus.UNKNOWN)
 
-        if ip in self.ip_rdns_cache:
-            hop.rdns = self.ip_rdns_cache[ip]
+        if ip in self.rdns.cache:
+            hop.rdns = self.rdns.cache[ip]
         elif is_global_ip(ip):
             hop.rdns = None
-            if ip not in self.rdns_submitted:
-                self.rdns_submitted.add(ip)
+            if ip not in self.rdns.submitted:
+                self.rdns.submitted.add(ip)
                 jobs.submit(
                     reverse_dns,
                     ip,
@@ -1861,7 +1925,7 @@ class TraceState:
         else:
             hop.rdns = ""
 
-        mtu = self.mtu_cache.get((hop.family, hop.index))
+        mtu = self.mtu.cache.get((hop.family, hop.index))
         if mtu:
             hop.mtu = mtu
 
@@ -1877,9 +1941,9 @@ class TraceState:
             )
 
     def apply_public_ip(self, jobs: AsyncJobs, fam: Family, ip: str) -> None:
-        self.pub_info[fam].ip = ip
+        self.public.info[fam].ip = ip
         if not ip:
-            self.pub_info[fam].rdns = ""
+            self.public.info[fam].rdns = ""
             return
         jobs.submit(
             reverse_dns,
@@ -1889,40 +1953,23 @@ class TraceState:
         )
 
     def apply_public_rdns(self, fam: Family, ip: str, hostname: str) -> None:
-        if self.pub_info[fam].ip == ip:
-            self.pub_info[fam].rdns = hostname
+        if self.public.info[fam].ip == ip:
+            self.public.info[fam].rdns = hostname
 
     def should_lookup(self, ip: str) -> bool:
-        if self.lookup_status.get(ip) == LookupStatus.MISSING:
-            return False
-        if ip in self.lookup_pending:
-            return False
-        retry_at = self.lookup_retry_at.get(ip)
-        return retry_at is None or time.monotonic() >= retry_at
+        return self.lookup.should_start(ip)
 
     def note_lookup_started(self, ip: str) -> None:
-        self.lookup_pending.add(ip)
-        self.lookup_attempts[ip] = self.lookup_attempts.get(ip, 0) + 1
-        self.set_lookup_status(ip, LookupStatus.PENDING)
+        self.set_lookup_status(ip, self.lookup.started(ip))
 
     def note_lookup_done(self, ip: str, *, retry: bool) -> None:
-        self.lookup_pending.discard(ip)
-        if retry:
-            self.lookup_retry_at[ip] = time.monotonic() + 1.0
-            self.set_lookup_status(ip, LookupStatus.PENDING)
-        else:
-            self.lookup_retry_at.pop(ip, None)
-            self.lookup_attempts.pop(ip, None)
+        self.set_lookup_status(ip, self.lookup.done(ip, retry=retry))
 
     def note_lookup_missing(self, ip: str) -> None:
-        self.note_lookup_done(ip, retry=False)
-        self.set_lookup_status(ip, LookupStatus.MISSING)
+        self.set_lookup_status(ip, self.lookup.missing(ip))
 
     def set_lookup_status(self, ip: str, status: LookupStatus) -> None:
-        if status != LookupStatus.UNKNOWN:
-            self.lookup_status[ip] = status
-        else:
-            self.lookup_status.pop(ip, None)
+        self.lookup.set_status(ip, status)
         for hop in self.hops.values():
             if hop.ip == ip:
                 hop.alloc_status = status
@@ -1966,15 +2013,15 @@ def process_mtr_line(
 
 def apply_allocation(state: TraceState, ip: str, result: AllocationResult) -> None:
     for route in result.routes:
-        if route in state.prefix_cache:
+        if route in state.allocation.prefixes:
             continue
-        state.prefix_cache.append(route)
+        state.allocation.remember_prefix(route)
         for hop in state.hops.values():
-            if hop.ip and route.contains(hop.ip) and not state.ip_as_cache.get(hop.ip):
+            if hop.ip and route.contains(hop.ip) and not state.allocation.by_ip.get(hop.ip):
                 state.apply_asn(hop.ip, route.asn, route.name)
 
     if result.temporary_failure:
-        if state.lookup_attempts.get(ip, 0) >= WHOIS_LOOKUP_MAX_ATTEMPTS:
+        if state.lookup.attempts.get(ip, 0) >= WHOIS_LOOKUP_MAX_ATTEMPTS:
             state.note_lookup_missing(ip)
         else:
             state.note_lookup_done(ip, retry=True)
@@ -2049,6 +2096,37 @@ def _mtr_return_status(procs: list[subprocess.Popen[str]]) -> tuple[int, str]:
     return returncode, stderr
 
 
+@dataclass(frozen=True)
+class MtuProbePlan:
+    family: Family
+    addr: str
+    hop_indices: tuple[int, ...]
+    max_packet: int
+
+
+@dataclass
+class MtuDiscoveryRuntime:
+    progress: queue.Queue[tuple[Family, int, MtuResult]] = field(default_factory=queue.Queue)
+    started: set[Family] = field(default_factory=set)
+
+    def has_started(self, family: Family) -> bool:
+        return family in self.started
+
+    def mark_started(self, family: Family) -> None:
+        self.started.add(family)
+
+    def publish(self, family: Family, hop: int, result: MtuResult) -> None:
+        self.progress.put((family, hop, result))
+
+    def drain_into(self, state: TraceState) -> None:
+        while True:
+            try:
+                fam, hop, result = self.progress.get_nowait()
+            except queue.Empty:
+                return
+            state.apply_mtu((fam, hop), result)
+
+
 @dataclass
 class LiveRun:
     args: argparse.Namespace
@@ -2059,8 +2137,7 @@ class LiveRun:
     gw: dict[Family, list[GwEntry]] = field(default_factory=local_gateway_info)
     dns_results: DnsResults = field(default_factory=dict)
     jobs: AsyncJobs = field(init=False)
-    mtu_progress: queue.Queue[tuple[Family, int, MtuResult]] = field(default_factory=queue.Queue)
-    mtu_started: set[Family] = field(default_factory=set)
+    mtu_runtime: MtuDiscoveryRuntime = field(default_factory=MtuDiscoveryRuntime)
     clear: bool = field(init=False)
 
     def __post_init__(self) -> None:
@@ -2088,41 +2165,59 @@ class LiveRun:
     def start_mtu_checks(self, resolved: dict[Family, str]) -> None:
         if self.args.no_mtu:
             return
+        for plan in self.mtu_probe_plans(resolved):
+            self.submit_mtu_probe_plan(plan)
+
+    def mtu_probe_plans(self, resolved: dict[Family, str]) -> Iterator[MtuProbePlan]:
         for fam, addr in resolved.items():
-            if fam in self.mtu_started:
-                continue
-            target_hop = self.target_hop_index(fam, addr)
-            if target_hop is None:
-                continue
-            # Start before the main trace finishes, but only after the target
-            # hop has five main probes. That gives loss/route discovery enough
-            # signal and avoids MTU work for unreachable targets.
-            if self.state.hops[(fam, target_hop)].sent < MTU_START_AFTER_PROBES:
-                continue
-            hop_indices = self.mtu_probe_hop_indices(fam, target_hop)
-            if not hop_indices:
-                continue
-            limit = self.mtu_limit(fam)
-            if limit is None or limit < 128:
-                continue
-            hop_budget = max(1.0, self.args.mtu_timeout * MTU_MAX_RETRIES * 2.0)
-            mtu_deadline = time.monotonic() + max(self.args.mtu_total_timeout, hop_budget * len(hop_indices))
-            discoverer = MtrMtuDiscoverer(
-                self.mtr_prefix,
-                fam,
-                addr,
-                limit,
-                self.args.mtu_timeout,
-                mtu_deadline,
-                progress=lambda hop, result, fam=fam: self.mtu_progress.put((fam, hop, result)),
-            )
-            self.jobs.submit(
-                discoverer.full_map,
-                hop_indices,
-                apply=lambda result, fam=fam: self.state.apply_mtu_map(fam, result),
-                label=f"mtu discovery {fam} {len(hop_indices)} responsive hops",
-            )
-            self.mtu_started.add(fam)
+            plan = self.mtu_probe_plan(fam, addr)
+            if plan:
+                yield plan
+
+    def mtu_probe_plan(self, family: Family, addr: str) -> MtuProbePlan | None:
+        if self.mtu_runtime.has_started(family):
+            return None
+        target_hop = self.target_hop_index(family, addr)
+        if target_hop is None:
+            return None
+        target = self.state.hops.get((family, target_hop))
+        # Start before the main trace finishes, but only after the target hop
+        # has five main probes. That gives loss/route discovery enough signal
+        # and avoids MTU work for unreachable targets.
+        if target is None or target.sent < MTU_START_AFTER_PROBES:
+            return None
+        hop_indices = self.mtu_probe_hop_indices(family, target_hop)
+        if not hop_indices:
+            return None
+        limit = self.mtu_limit(family)
+        if limit is None or limit < MTU_MIN_PACKET:
+            return None
+        return MtuProbePlan(
+            family=family,
+            addr=addr,
+            hop_indices=hop_indices,
+            max_packet=limit,
+        )
+
+    def submit_mtu_probe_plan(self, plan: MtuProbePlan) -> None:
+        hop_budget = max(1.0, self.args.mtu_timeout * MTU_MAX_RETRIES * 2.0)
+        mtu_deadline = time.monotonic() + max(self.args.mtu_total_timeout, hop_budget * len(plan.hop_indices))
+        discoverer = MtrMtuDiscoverer(
+            self.mtr_prefix,
+            plan.family,
+            plan.addr,
+            plan.max_packet,
+            self.args.mtu_timeout,
+            mtu_deadline,
+            progress=lambda hop, result, fam=plan.family: self.mtu_runtime.publish(fam, hop, result),
+        )
+        self.jobs.submit(
+            discoverer.full_map,
+            plan.hop_indices,
+            apply=lambda result, fam=plan.family: self.state.apply_mtu_map(fam, result),
+            label=f"mtu discovery {plan.family} {len(plan.hop_indices)} responsive hops",
+        )
+        self.mtu_runtime.mark_started(plan.family)
 
     def target_hop_index(self, family: Family, addr: str) -> int | None:
         matches = [
@@ -2142,12 +2237,14 @@ class LiveRun:
         )
 
     def apply_pending_mtu_progress(self) -> None:
-        while True:
-            try:
-                fam, hop, result = self.mtu_progress.get_nowait()
-            except queue.Empty:
-                return
-            self.state.apply_mtu((fam, hop), result)
+        self.mtu_runtime.drain_into(self.state)
+
+    def service_background_jobs(self, resolved: dict[Family, str]) -> None:
+        self.apply_pending_mtu_progress()
+        self.jobs.apply_done()
+        self.apply_pending_mtu_progress()
+        self.start_mtu_checks(resolved)
+        self.schedule_due_lookups()
 
     def mtu_enabled(self) -> bool:
         return not self.args.no_mtu and any(self.mtu_limit(fam) is not None for fam in FAMILIES)
@@ -2168,7 +2265,7 @@ class LiveRun:
             clear=self.clear,
             done=done,
             probes=self.state.probes,
-            pub_info=self.state.pub_info,
+            pub_info=self.state.public.info,
             dns_results=self.dns_results,
             mtu_enabled=self.mtu_enabled(),
             phase=phase,
@@ -2184,34 +2281,22 @@ class LiveRun:
         try:
             item = q.get(timeout=0.1)
         except queue.Empty:
-            self.apply_pending_mtu_progress()
-            self.jobs.apply_done()
-            self.apply_pending_mtu_progress()
-            self.start_mtu_checks(resolved)
-            self.schedule_due_lookups()
+            self.service_background_jobs(resolved)
             return active_procs
 
         if item is MTR_DONE:
-            self.apply_pending_mtu_progress()
-            self.jobs.apply_done()
-            self.apply_pending_mtu_progress()
-            self.start_mtu_checks(resolved)
-            self.schedule_due_lookups()
+            self.service_background_jobs(resolved)
             return active_procs - 1
 
         fam, raw_line = item
         process_mtr_line(self.state, self.jobs, fam, raw_line)
-        self.apply_pending_mtu_progress()
-        self.jobs.apply_done()
-        self.apply_pending_mtu_progress()
-        self.start_mtu_checks(resolved)
-        self.schedule_due_lookups()
+        self.service_background_jobs(resolved)
         return active_procs
 
     def schedule_due_lookups(self) -> None:
         if _STOP_EVENT.is_set():
             return
-        if self.state.lookup_pending:
+        if self.state.lookup.pending:
             return
         for ip in dict.fromkeys(hop.ip for hop in self.state.hops.values() if hop.ip):
             if not is_global_ip(ip) or self.state.cached_allocation(ip) != ("", ""):
@@ -2246,14 +2331,11 @@ class LiveRun:
             _finish_processes(procs)
         return procs
 
-    def drain_jobs(self) -> None:
+    def drain_jobs(self, resolved: dict[Family, str]) -> None:
         while True:
             if _STOP_EVENT.is_set():
                 return
-            self.apply_pending_mtu_progress()
-            self.jobs.apply_done()
-            self.apply_pending_mtu_progress()
-            self.schedule_due_lookups()
+            self.service_background_jobs(resolved)
             if not self.jobs:
                 return
             self.render(phase="processing")
@@ -2334,7 +2416,7 @@ def run_live(args: argparse.Namespace, color: Color) -> int:
             live.start(resolved)
             procs = live.run_mtr(cmd, resolved)
             live.start_mtu_checks(resolved)
-            live.drain_jobs()
+            live.drain_jobs(resolved)
     except KeyboardInterrupt:
         _STOP_EVENT.set()
         if live is not None:
