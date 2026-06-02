@@ -1345,10 +1345,10 @@ class MtrMtuDiscoverer:
             "-n",
             "-c",
             "1",
-            "-i",
-            "0.05",
             "-G",
             str(self.timeout),
+            "-f",
+            str(ttl),
             "-m",
             str(ttl),
             "-s",
@@ -1400,8 +1400,11 @@ class MtrMtuDiscoverer:
         if _STOP_EVENT.is_set() or self.timed_out():
             return MtuResult(mtu=None, status="timeout")
         small_packet = min(MTU_MIN_PACKET, self.max_packet)
-        if not self.hop_allows(hop_index, small_packet):
-            return self.publish_result(hop_index, None, f"<{small_packet}")
+        small_probe = self.probe_hop(small_packet, hop_index)
+        if hop_index not in small_probe.reached:
+            if small_probe.too_big:
+                return self.publish_result(hop_index, None, f"<{small_packet}")
+            return self.publish_result(hop_index, None, small_probe.status)
         self.publish_result(hop_index, small_packet, "probing")
         if not max_packet_known_blocked and self.hop_allows(hop_index, self.max_packet):
             return self.publish_result(hop_index, self.max_packet)
