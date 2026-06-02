@@ -9,8 +9,10 @@ Runtime behavior notes:
 - MTU discovery starts while mtr is still running, but only after the target hop
   has been observed and has five main probes. If the target is unreachable, MTU
   discovery is skipped for that address family.
-- MTU discovery probes only hops that answered the main mtr. Silent hops are
-  left blank because probing them again mostly measures ICMP rate limiting.
+- MTU discovery probes only hops that answered the main mtr. It first tries the
+  interface MTU at the farthest hop; if that works, the whole responsive path is
+  done. Silent hops are left blank because probing them again mostly measures
+  ICMP rate limiting.
 - Ctrl-C should leave the latest main display visible instead of losing it to
   the alternate screen.
 """
@@ -1394,14 +1396,14 @@ class MtrMtuDiscoverer:
         self.note_progress(hop_index, result)
         return result
 
-    def find_hop_mtu(self, hop_index: int) -> MtuResult:
+    def find_hop_mtu(self, hop_index: int, max_packet_known_blocked: bool = False) -> MtuResult:
         if _STOP_EVENT.is_set() or self.timed_out():
             return MtuResult(mtu=None, status="timeout")
         small_packet = min(MTU_MIN_PACKET, self.max_packet)
         if not self.hop_allows(hop_index, small_packet):
             return self.publish_result(hop_index, None, f"<{small_packet}")
         self.publish_result(hop_index, small_packet, "probing")
-        if self.hop_allows(hop_index, self.max_packet):
+        if not max_packet_known_blocked and self.hop_allows(hop_index, self.max_packet):
             return self.publish_result(hop_index, self.max_packet)
 
         low = small_packet
@@ -1423,16 +1425,38 @@ class MtrMtuDiscoverer:
         if self.progress:
             self.progress(hop_index, result)
 
-    def full_map(self, hop_indices: tuple[int, ...]) -> dict[int, MtuResult]:
+    def publish_max_packet_prefix(self, hop_indices: tuple[int, ...], through: int) -> dict[int, MtuResult]:
         results: dict[int, MtuResult] = {}
-        for i, hop_index in enumerate(hop_indices):
+        for hop_index in hop_indices:
+            if hop_index > through:
+                break
+            results[hop_index] = self.publish_result(hop_index, self.max_packet)
+        return results
+
+    def split_at_farthest_max_packet_hop(self, hop_indices: tuple[int, ...]) -> int | None:
+        for hop_index in reversed(hop_indices):
+            if _STOP_EVENT.is_set() or self.timed_out():
+                return None
+            if self.hop_allows(hop_index, self.max_packet):
+                return hop_index
+        return None
+
+    def full_map(self, hop_indices: tuple[int, ...]) -> dict[int, MtuResult]:
+        hop_indices = tuple(sorted(hop_indices))
+        results: dict[int, MtuResult] = {}
+        farthest_max_hop = self.split_at_farthest_max_packet_hop(hop_indices)
+        if farthest_max_hop is not None:
+            results.update(self.publish_max_packet_prefix(hop_indices, farthest_max_hop))
+
+        remaining = tuple(hop for hop in hop_indices if hop not in results)
+        for i, hop_index in enumerate(remaining):
             if _STOP_EVENT.is_set():
                 return self.with_inferred_forwarding_mtu(results)
             if self.timed_out():
-                for rest in hop_indices[i:]:
+                for rest in remaining[i:]:
                     results[rest] = MtuResult(mtu=None, status="timeout")
                 return self.with_inferred_forwarding_mtu(results)
-            results[hop_index] = self.find_hop_mtu(hop_index)
+            results[hop_index] = self.find_hop_mtu(hop_index, max_packet_known_blocked=True)
         return self.with_inferred_forwarding_mtu(results)
 
     def with_inferred_forwarding_mtu(self, results: dict[int, MtuResult]) -> dict[int, MtuResult]:
