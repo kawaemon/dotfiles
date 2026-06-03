@@ -1,16 +1,29 @@
 model = "gpt-5.5"
 model_reasoning_effort = "high"
+approvals_reviewer = "guardian_subagent"
+plan_mode_reasoning_effort = "xhigh"
+
 [features]
 goals = true
 
 [projects."/home/kawak/tmp/yang"]
 trust_level = "trusted"
 
+[projects."/home/kawak/repo/github.com/kawaemon/dotfiles"]
+trust_level = "trusted"
+
+[projects."/home/kawak/repo/github.com/kawaemon/topopg"]
+trust_level = "trusted"
+
 [tui]
-status_line = ["model-with-reasoning", "current-dir", "five-hour-limit", "weekly-limit", "task-progress"]
+status_line = ["model-with-reasoning", "current-dir", "five-hour-limit", "weekly-limit", "task-progress", "context-remaining"]
 status_line_use_colors = true
 
 [tui.model_availability_nux]
 "gpt-5.5" = 4
 
+[notice]
+hide_rate_limit_model_nudge = true
 
+[agents]
+max_threads = 16
