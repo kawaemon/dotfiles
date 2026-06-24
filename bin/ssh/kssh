@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+import sys
+
+@dataclass
+class HostConfig:
+    host: str
+    password: str | None
+    legacy: bool
+
+LEGACY = """ \
+-o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group1-sha1 \
+-o Ciphers=+aes256-cbc,aes128-cbc \
+-o HostKeyAlgorithms=+ssh-rsa \
+-o SetEnv=TERM=xterm \
+"""
+
+def main():
+    sshconfig = Path("~/.ssh/config").expanduser().read_text()
+
+    PASSWORD_PREFIX = "# password:"
+    password = ""
+
+    LEGACY_PREFIX = "# legacy:"
+    legacy = False
+
+    END_PREFIX = "# end"
+
+    hosts = []
+
+    for line in sshconfig.splitlines():
+        if line.strip().startswith(PASSWORD_PREFIX):
+            password = line.removeprefix(PASSWORD_PREFIX).strip()
+            continue
+        if line.strip().startswith(LEGACY_PREFIX):
+            legacy = True
+            continue
+        if line.strip().startswith(END_PREFIX):
+            legacy = False
+            password = ""
+            continue
+
+        if (host := ssh_looks_like_host(line)) != "":
+            hosts.append(HostConfig(host, password if len(password) > 0 else None, legacy))
+            continue
+
+    hosts.sort(key=lambda d: d.host)
+    choosen = choose_with_fzf(hosts)
+
+    command = f"ssh {choosen.host}"
+    if choosen.password:
+        command = f"sshpass -f <({choosen.password}) " + command
+    else:
+        command =  "\\" + command
+
+    if choosen.legacy:
+        command += LEGACY
+    print(command)
+    print(command, file=sys.stderr)
+
+
+def ssh_looks_like_host(line):
+    comp = line.split()
+    if len(comp) >= 2 and comp[0].lower() == "host" and '*' not in comp[1]:
+        return comp[1]
+    return ""
+
+def craft_command(cmd):
+    return f""
+
+def choose_with_fzf(candidates):
+    proc = subprocess.run(
+        ["fzf", "--print-query", f"--expect=ctrl-d"],
+        input="\n".join([h.host for h in candidates]) + "\n",
+        stdout=subprocess.PIPE,
+        stderr=None,
+        text=True,
+        check=False,
+    )
+    aborted = proc.returncode == 130
+    lines = proc.stdout.splitlines()
+    query, nomatch, select = None, False, None
+    if len(lines) >= 1:
+        query = lines[0]
+        if len(lines) >= 2:
+            nomatch = len(lines[1].strip()) > 0
+            if len(lines) >= 3:
+                select = lines[2]
+    # print(f"{query=} {aborted=} {nomatch=} {select=}", file=sys.stderr)
+    if aborted:
+        exit()
+    if nomatch:
+        return HostConfig(query, None, False)
+    for c in candidates:
+        if c.host == select:
+            return c
+    raise RuntimeError(f"not found: {select}")
+
+
+
+if __name__ == "__main__":
+    main()
