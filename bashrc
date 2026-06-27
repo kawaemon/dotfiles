@@ -11,7 +11,16 @@ alias yarn='corepack yarn'
 alias pnpm='corepack pnpm'
 alias ports='ss -tulnp'
 alias speedtest='speedtest -s 48463'
-alias ssh='eval $(kssh "$@")'
+ssh() {
+  local cmd
+  cmd="$(kssh "$@")" || return
+  if [ -n "${ZSH_VERSION:-}" ]; then
+    print -s -- "$cmd"
+  elif [ -n "${BASH_VERSION:-}" ]; then
+    history -s "$cmd"
+  fi
+  eval "$cmd"
+}
 
 if command -v nvim >/dev/null 2>&1; then
   export EDITOR=nvim
@@ -29,7 +38,7 @@ alias vim=$EDITOR
 alias nvim=$EDITOR
 
 # 古いルータなど...
-alias lssh='\ssh \
+alias lssh='/usr/bin/ssh \
     -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group1-sha1 \
     -o Ciphers=+aes256-cbc,aes128-cbc \
     -o HostKeyAlgorithms=+ssh-rsa \

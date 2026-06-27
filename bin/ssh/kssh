@@ -48,9 +48,16 @@ def main():
             continue
 
     hosts.sort(key=lambda d: d.host)
-    choosen = choose_with_fzf(hosts)
 
-    command = f"ssh {choosen.host}"
+    if len(sys.argv) >= 2:
+        key = sys.argv[1]
+        choosen = find(hosts, lambda h: h.host == key)
+        if choosen is None:
+            choosen = HostConfig(key, None, False)
+    else:
+        choosen = choose_with_fzf(hosts)
+
+    command = f"/usr/bin/ssh {choosen.host}"
     if choosen.password:
         command = f"sshpass -f <({choosen.password}) " + command
     else:
@@ -70,6 +77,12 @@ def ssh_looks_like_host(line):
 
 def craft_command(cmd):
     return f""
+
+def find(lst, f):
+    for l in lst:
+        if f(l):
+            return l
+    return None
 
 def choose_with_fzf(candidates):
     proc = subprocess.run(
@@ -94,10 +107,12 @@ def choose_with_fzf(candidates):
         exit()
     if nomatch:
         return HostConfig(query, None, False)
-    for c in candidates:
-        if c.host == select:
-            return c
-    raise RuntimeError(f"not found: {select}")
+
+    ret = find(candidates, lambda c: c.host == select)
+    if ret is None:
+        raise RuntimeError(f"not found: {select}")
+
+    return ret
 
 
 
