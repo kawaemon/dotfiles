@@ -47,3 +47,4 @@ ln -sfv $PWD/codex.toml $HOME/.codex/config.toml
 mkdir -p $HOME/.local/bin
 ln -sfv $PWD/bin/netcheck/netcheck $HOME/.local/bin/netcheck
 ln -sfv $PWD/bin/ssh/kssh $HOME/.local/bin/kssh
+ln -sfv $PWD/bin/tcpview/tcpview $HOME/.local/bin/tcpview

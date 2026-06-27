@@ -1,0 +1,1890 @@
+#!/usr/bin/env python3
+"""
+macOS TCP connection quality TUI.
+
+This intentionally keeps OS-specific collection behind a provider boundary.
+macOS does not expose Linux ss(8)-style per-socket RTT/cwnd/retrans details
+through netstat(1), so this provider reports the kernel TCP PCB table fields
+that are available: queues, states, byte counters, socket buffer watermarks,
+process names, plus global TCP statistics when netstat -s is permitted.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import curses
+import datetime as dt
+import platform
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import time
+from collections import Counter
+from dataclasses import dataclass, field, replace
+from typing import Callable, Iterable, Protocol
+
+
+@dataclass(frozen=True, order=True)
+class ConnectionKey:
+    proto: str
+    local: str
+    foreign: str
+    process: str
+    pid: int | None
+
+
+@dataclass(frozen=True)
+class TransportKey:
+    proto: str
+    local: str
+    foreign: str
+
+
+@dataclass(frozen=True)
+class FallbackKey:
+    proto: str
+    local_port: int | None
+    foreign_port: int | None
+    pid: int | None
+
+
+@dataclass(frozen=True)
+class ProcessInfo:
+    name: str
+    pid: int | None
+
+
+@dataclass(frozen=True)
+class Cell:
+    name: str
+    value: str
+    width: int
+    align: str
+    attr: int = 0
+
+    def with_width(self, width: int) -> Cell:
+        return replace(self, width=width)
+
+    def render(self) -> str:
+        value = truncate(self.value, self.width)
+        if self.align == ">":
+            return f"{value:>{self.width}}"
+        return f"{value:<{self.width}}"
+
+
+@dataclass(frozen=True)
+class DisplayRow:
+    state: str
+    svc: str
+    rtt: str
+    retrans: str
+    tx_win: str
+    tx_cwin: str
+    rx_dupe: str
+    rx_ooo: str
+    rx_rate: str
+    tx_rate: str
+    path: str
+    destination: str
+    process: str
+
+
+@dataclass(frozen=True)
+class StatPattern:
+    key: str
+    pattern: re.Pattern[str]
+
+
+@dataclass(frozen=True)
+class TcpConnection:
+    proto: str
+    recv_q: int
+    send_q: int
+    local: str
+    foreign: str
+    state: str
+    rx_bytes: int
+    tx_bytes: int
+    recv_hiwater: int
+    send_hiwater: int
+    process: str
+    pid: int | None
+    kernel_state: str = ""
+    options: str = ""
+    gencnt: str = ""
+    flags: str = ""
+    flags1: str = ""
+    display_local: str = ""
+    display_foreign: str = ""
+    interface: str = ""
+    rtt_avg_ms: float | None = None
+    rx_dupe: int | None = None
+    rx_ooo: int | None = None
+    retransmits: int | None = None
+    tx_win: int | None = None
+    tx_cwin: int | None = None
+    cc_algo: str = ""
+
+    @property
+    def key(self) -> ConnectionKey:
+        return ConnectionKey(self.proto, self.local, self.foreign, self.process, self.pid)
+
+    @property
+    def transport_key(self) -> TransportKey:
+        return TransportKey(self.proto, normalize_endpoint(self.local), normalize_endpoint(self.foreign))
+
+
+@dataclass(frozen=True)
+class TcpStats:
+    counters: dict[str, int]
+
+    def get(self, key: str) -> int:
+        return self.counters.get(key, 0)
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    provider: str
+    taken_at: float
+    connections: list[TcpConnection]
+    stats: TcpStats
+    errors: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class NetTopMetrics:
+    process: str = ""
+    pid: int | None = None
+    local: str = ""
+    foreign: str = ""
+    interface: str = ""
+    rtt_avg_ms: float | None = None
+    rx_dupe: int | None = None
+    rx_ooo: int | None = None
+    retransmits: int | None = None
+    tx_win: int | None = None
+    tx_cwin: int | None = None
+    cc_algo: str = ""
+
+
+@dataclass(frozen=True)
+class ConnectionView:
+    conn: TcpConnection
+    rx_rate: float = 0.0
+    tx_rate: float = 0.0
+    first_seen: float = 0.0
+    order: int = 0
+    age_state: str = ""
+
+    @property
+    def activity(self) -> float:
+        return self.rx_rate + self.tx_rate
+
+
+@dataclass
+class RowSlot:
+    """Stable screen row state for a single connection lifecycle.
+
+    A slot may keep a disappeared connection for a short removal window so the
+    row can flash before becoming reusable.  New connections reuse empty slots
+    instead of shifting unrelated visible rows.
+    """
+
+    key: ConnectionKey | None = None
+    view: ConnectionView | None = None
+    rx_total: int = 0
+    tx_total: int = 0
+    sampled_at: float = 0.0
+    retrans_total: int | None = None
+    rx_dupe_total: int | None = None
+    rx_ooo_total: int | None = None
+    rx_highlight_until: float = 0.0
+    tx_highlight_until: float = 0.0
+    rx_soft_highlight_until: float = 0.0
+    tx_soft_highlight_until: float = 0.0
+    retrans_highlight_until: float = 0.0
+    retrans_soft_highlight_until: float = 0.0
+    rx_dupe_highlight_until: float = 0.0
+    rx_dupe_soft_highlight_until: float = 0.0
+    rx_ooo_highlight_until: float = 0.0
+    rx_ooo_soft_highlight_until: float = 0.0
+    tx_win_value: int | None = None
+    tx_win_good_until: float = 0.0
+    tx_win_bad_until: float = 0.0
+    tx_win_soft_good_until: float = 0.0
+    tx_win_soft_bad_until: float = 0.0
+    tx_cwin_value: int | None = None
+    tx_cwin_good_until: float = 0.0
+    tx_cwin_bad_until: float = 0.0
+    tx_cwin_soft_good_until: float = 0.0
+    tx_cwin_soft_bad_until: float = 0.0
+    ended_until: float = 0.0
+
+    def is_ended(self, now: float) -> bool:
+        return self.view is not None and self.ended_until > now
+
+    def is_reusable(self, now: float) -> bool:
+        return self.view is None or (self.ended_until > 0 and now >= self.ended_until)
+
+    def clear(self) -> None:
+        self.key = None
+        self.view = None
+        self.rx_total = 0
+        self.tx_total = 0
+        self.sampled_at = 0.0
+        self.retrans_total = None
+        self.rx_dupe_total = None
+        self.rx_ooo_total = None
+        self.rx_highlight_until = 0.0
+        self.tx_highlight_until = 0.0
+        self.rx_soft_highlight_until = 0.0
+        self.tx_soft_highlight_until = 0.0
+        self.retrans_highlight_until = 0.0
+        self.retrans_soft_highlight_until = 0.0
+        self.rx_dupe_highlight_until = 0.0
+        self.rx_dupe_soft_highlight_until = 0.0
+        self.rx_ooo_highlight_until = 0.0
+        self.rx_ooo_soft_highlight_until = 0.0
+        self.tx_win_value = None
+        self.tx_win_good_until = 0.0
+        self.tx_win_bad_until = 0.0
+        self.tx_win_soft_good_until = 0.0
+        self.tx_win_soft_bad_until = 0.0
+        self.tx_cwin_value = None
+        self.tx_cwin_good_until = 0.0
+        self.tx_cwin_bad_until = 0.0
+        self.tx_cwin_soft_good_until = 0.0
+        self.tx_cwin_soft_bad_until = 0.0
+        self.ended_until = 0.0
+
+    def begin_removal(self, now: float, hold_seconds: float) -> None:
+        """Start the row-removal window, or clear it if the window has expired."""
+        if self.view is None:
+            self.clear()
+            return
+        if self.ended_until > 0 and now >= self.ended_until:
+            self.clear()
+            return
+        if self.ended_until <= 0:
+            self.ended_until = now + hold_seconds
+
+
+@dataclass
+class SlotTable:
+    """Owns fixed row-slot placement and per-connection trend state."""
+
+    slots: list[RowSlot] = field(default_factory=list)
+    first_seen: dict[ConnectionKey, float] = field(default_factory=dict)
+    order: dict[ConnectionKey, int] = field(default_factory=dict)
+    next_order: int = 1
+
+    def __len__(self) -> int:
+        return len(self.slots)
+
+    def update(
+        self,
+        snapshot: Snapshot,
+        previous: Snapshot | None,
+        show_all: bool,
+        now: float,
+        is_initial: bool,
+    ) -> None:
+        """Merge a snapshot into stable slots without shifting unrelated rows."""
+        self._update_connection_order(snapshot)
+        all_views = compute_views(snapshot, previous, self.first_seen, self.order)
+        hidden_keys = {view.conn.key for view in all_views if not should_slot_view(view, show_all)}
+        views = [view for view in all_views if should_slot_view(view, show_all)]
+        if is_initial:
+            views = [replace(view, age_state="") for view in views]
+        views_by_key = {view.conn.key: view for view in views}
+        active_keys = set(views_by_key)
+
+        for slot in self.slots:
+            if slot.key in active_keys:
+                view = views_by_key.pop(slot.key)  # type: ignore[arg-type]
+                slot.view = update_slot_activity(slot, view, now, is_new=False)
+                slot.ended_until = 0.0
+            else:
+                if slot.key in hidden_keys:
+                    slot.begin_removal(now, ENDED_FLASH_SECONDS)
+                elif slot.view is not None and slot.ended_until <= 0:
+                    slot.begin_removal(now, ENDED_FLASH_SECONDS)
+                elif slot.ended_until > 0 and now >= slot.ended_until:
+                    slot.clear()
+
+        self._place_new_views(views_by_key.values(), now)
+
+    def fill_visible_holes(self, max_rows: int, show_all: bool, now: float) -> None:
+        """Move offscreen renderable rows into visible holes only."""
+        self.clear_expired(now)
+        if max_rows <= 0:
+            return
+
+        donor_start = min(max_rows, len(self.slots))
+        for target_idx in range(min(max_rows, len(self.slots))):
+            if not self.is_hole(target_idx, show_all, now):
+                continue
+            donor_idx = self.find_offscreen_donor(donor_start, show_all, now)
+            if donor_idx is None:
+                continue
+            self.move_slot(donor_idx, target_idx)
+
+    def visible_slots(self, max_rows: int, show_all: bool, now: float) -> list[RowSlot]:
+        self.fill_visible_holes(max_rows, show_all, now)
+        return self.slots[:max_rows]
+
+    def count_renderable(self, slots: Iterable[RowSlot], show_all: bool, now: float) -> int:
+        return sum(1 for slot in slots if should_render_slot(slot, show_all, now))
+
+    def clear_expired(self, now: float) -> None:
+        for slot in self.slots:
+            if slot.ended_until > 0 and now >= slot.ended_until:
+                slot.clear()
+
+    def is_hole(self, index: int, show_all: bool, now: float) -> bool:
+        return not should_render_slot(self.slots[index], show_all, now)
+
+    def find_offscreen_donor(self, start: int, show_all: bool, now: float) -> int | None:
+        for idx in range(start, len(self.slots)):
+            if should_render_slot(self.slots[idx], show_all, now):
+                return idx
+        return None
+
+    def move_slot(self, source_idx: int, target_idx: int) -> None:
+        self.slots[target_idx].clear()
+        self.slots[target_idx], self.slots[source_idx] = self.slots[source_idx], self.slots[target_idx]
+
+    def _update_connection_order(self, snapshot: Snapshot) -> None:
+        for conn in snapshot.connections:
+            if conn.key in self.first_seen:
+                continue
+            self.first_seen[conn.key] = snapshot.taken_at
+            kernel_order = gencnt_order(conn)
+            self.order[conn.key] = kernel_order if kernel_order else self.next_order
+            self.next_order += 1
+
+    def _place_new_views(self, views: Iterable[ConnectionView], now: float) -> None:
+        new_views = sorted(views, key=lambda v: (v.first_seen, v.order, v.conn.key), reverse=True)
+        for view in new_views:
+            empty = next((slot for slot in self.slots if slot.is_reusable(now)), None)
+            if empty is None:
+                slot = RowSlot(key=view.conn.key, view=view)
+                slot.view = update_slot_activity(slot, view, now, is_new=True)
+                self.slots.append(slot)
+            else:
+                empty.clear()
+                empty.key = view.conn.key
+                empty.view = update_slot_activity(empty, view, now, is_new=True)
+
+
+TREND_HOLD_SECONDS = 3.0
+ENDED_FLASH_SECONDS = 1.0
+TRANSFER_HIGHLIGHT_DELTA_BYTES = 64 * 1024
+RETRANS_STRONG_DELTA_BYTES = 64 * 1024
+DISORDER_STRONG_DELTA_COUNT = 10
+WINDOW_STRONG_DELTA_BYTES = 64 * 1024
+WINDOW_STRONG_DELTA_RATIO = 0.25
+TRANSFER_TOTAL_WIDTH = 7
+TRANSFER_RATE_WIDTH = 7
+TRANSFER_CELL_WIDTH = TRANSFER_TOTAL_WIDTH + TRANSFER_RATE_WIDTH + 5
+
+
+class TcpProvider(Protocol):
+    name: str
+
+    def snapshot(self) -> Snapshot:
+        ...
+
+
+class MacOSNetstatProvider:
+    name = "macos-netstat"
+
+    def __init__(
+        self,
+        netstat: str = "netstat",
+        nettop: str = "nettop",
+        include_listeners: bool = True,
+        use_nettop: bool = True,
+    ):
+        self.netstat = netstat
+        self.nettop = nettop
+        self.include_listeners = include_listeners
+        self.use_nettop = use_nettop
+        self.name = "macos-netstat+nettop" if use_nettop else "macos-netstat"
+
+    def snapshot(self) -> Snapshot:
+        errors: list[str] = []
+        connections: list[TcpConnection] = []
+        stats = TcpStats({})
+
+        try:
+            connections = self._read_connections()
+        except ProviderError as exc:
+            errors.append(str(exc))
+
+        try:
+            stats = self._read_stats()
+        except ProviderError as exc:
+            errors.append(str(exc))
+
+        if self.use_nettop and connections:
+            try:
+                metrics = self._read_nettop_metrics()
+                connections = merge_nettop_metrics(connections, metrics)
+            except ProviderError as exc:
+                errors.append(str(exc))
+
+        if not self.include_listeners:
+            connections = [c for c in connections if c.state != "LISTEN"]
+
+        return Snapshot(
+            provider=self.name,
+            taken_at=time.time(),
+            connections=connections,
+            stats=stats,
+            errors=tuple(errors),
+        )
+
+    def _run(self, args: list[str]) -> str:
+        try:
+            proc = subprocess.run(
+                args,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=3.0,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise ProviderError(f"{args[0]} not found") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise ProviderError(f"{' '.join(args)} timed out") from exc
+
+        if proc.returncode != 0:
+            err = proc.stderr.strip() or proc.stdout.strip() or "unknown error"
+            raise ProviderError(f"{' '.join(args)} failed: {err}")
+        return proc.stdout
+
+    def _read_connections(self) -> list[TcpConnection]:
+        output = self._run([self.netstat, "-anv", "-p", "tcp"])
+        if not output.strip():
+            raise ProviderError("netstat -anv -p tcp returned no output")
+        return list(parse_macos_netstat_connections(output))
+
+    def _read_stats(self) -> TcpStats:
+        output = self._run([self.netstat, "-s", "-p", "tcp"])
+        if not output.strip():
+            raise ProviderError("netstat -s -p tcp returned no output")
+        return parse_macos_tcp_stats(output)
+
+    def _read_nettop_metrics(self) -> dict[TransportKey, NetTopMetrics]:
+        output = self._run([self.nettop, "-m", "tcp", "-L", "1", "-n", "-x", "-j", "tx_cwin", "-s", "1"])
+        if not output.strip():
+            raise ProviderError("nettop returned no output")
+        return parse_nettop_metrics(output)
+
+
+class ProviderError(RuntimeError):
+    pass
+
+
+def parse_macos_netstat_connections(output: str) -> Iterable[TcpConnection]:
+    for raw in output.splitlines():
+        line = raw.rstrip()
+        if not line.startswith(("tcp4", "tcp6")):
+            continue
+
+        parts = line.split()
+        # Fixed prefix:
+        # proto recvq sendq local foreign state rxbytes txbytes rhiwat shiwat
+        # Fixed suffix:
+        # tcp_state options gencnt flags flags1 usecnt rtncnt fltrs
+        if len(parts) < 18:
+            continue
+
+        prefix = parts[:10]
+        suffix = parts[-8:]
+        process_text = " ".join(parts[10:-8]).strip()
+        process = split_process_pid(process_text)
+
+        try:
+            yield TcpConnection(
+                proto=prefix[0],
+                recv_q=parse_int(prefix[1]),
+                send_q=parse_int(prefix[2]),
+                local=prefix[3],
+                foreign=prefix[4],
+                state=prefix[5],
+                rx_bytes=parse_int(prefix[6]),
+                tx_bytes=parse_int(prefix[7]),
+                recv_hiwater=parse_int(prefix[8]),
+                send_hiwater=parse_int(prefix[9]),
+                process=process.name,
+                pid=process.pid,
+                kernel_state=suffix[0],
+                options=suffix[1],
+                gencnt=suffix[2],
+                flags=suffix[3],
+                flags1=suffix[4],
+            )
+        except ValueError:
+            continue
+
+
+def split_process_pid(value: str) -> ProcessInfo:
+    if not value:
+        return ProcessInfo("-", None)
+    if ":" not in value:
+        return ProcessInfo(value, None)
+    name, pid_text = value.rsplit(":", 1)
+    try:
+        return ProcessInfo(name.strip() or "-", int(pid_text))
+    except ValueError:
+        return ProcessInfo(value, None)
+
+
+def parse_nettop_metrics(output: str) -> dict[TransportKey, NetTopMetrics]:
+    rows = csv.reader(output.splitlines())
+    try:
+        header = next(rows)
+    except StopIteration:
+        return {}
+
+    indexes = {name: idx for idx, name in enumerate(header) if name}
+    subject_idx = next((idx for idx, name in enumerate(header) if name == ""), 1)
+    metrics: dict[TransportKey, NetTopMetrics] = {}
+    current_process = ""
+    current_pid: int | None = None
+
+    for row in rows:
+        if len(row) <= subject_idx:
+            continue
+        subject = row[subject_idx].strip()
+        if not subject.startswith(("tcp4 ", "tcp6 ")):
+            process = split_nettop_process_pid(subject)
+            if process.pid is not None:
+                current_process = process.name
+                current_pid = process.pid
+            continue
+
+        key = parse_nettop_subject_key(subject)
+        if not key:
+            continue
+
+        metrics[key] = NetTopMetrics(
+            process=current_process,
+            pid=current_pid,
+            local=key.local,
+            foreign=key.foreign,
+            interface=csv_get(row, indexes, "interface"),
+            rtt_avg_ms=parse_ms(csv_get(row, indexes, "rtt_avg")),
+            rx_dupe=parse_optional_int(csv_get(row, indexes, "rx_dupe")),
+            rx_ooo=parse_optional_int(csv_get(row, indexes, "rx_ooo")),
+            retransmits=parse_optional_int(csv_get(row, indexes, "re-tx")),
+            tx_win=parse_optional_int(csv_get(row, indexes, "tx_win")),
+            tx_cwin=parse_optional_int(csv_get(row, indexes, "tx_cwin")),
+            cc_algo=csv_get(row, indexes, "cc_algo"),
+        )
+    return metrics
+
+
+def split_nettop_process_pid(value: str) -> ProcessInfo:
+    if "." not in value:
+        return ProcessInfo(value, None)
+    name, pid_text = value.rsplit(".", 1)
+    try:
+        return ProcessInfo(name.strip() or "-", int(pid_text))
+    except ValueError:
+        return ProcessInfo(value, None)
+
+
+def parse_nettop_subject_key(subject: str) -> TransportKey | None:
+    proto, _, endpoints = subject.partition(" ")
+    local, sep, foreign = endpoints.partition("<->")
+    if not sep:
+        return None
+    return TransportKey(proto, normalize_endpoint(local), normalize_endpoint(foreign))
+
+
+def merge_nettop_metrics(
+    connections: list[TcpConnection],
+    metrics: dict[TransportKey, NetTopMetrics],
+) -> list[TcpConnection]:
+    fallback = build_nettop_fallback_index(metrics)
+    merged: list[TcpConnection] = []
+    for conn in connections:
+        metric = metrics.get(conn.transport_key)
+        if not metric:
+            metric = fallback.get(connection_fallback_key(conn))
+        if not metric:
+            merged.append(conn)
+            continue
+        merged.append(
+            replace(
+                conn,
+                display_local=metric.local,
+                display_foreign=metric.foreign,
+                interface=metric.interface,
+                rtt_avg_ms=metric.rtt_avg_ms,
+                rx_dupe=metric.rx_dupe,
+                rx_ooo=metric.rx_ooo,
+                retransmits=metric.retransmits,
+                tx_win=metric.tx_win,
+                tx_cwin=metric.tx_cwin,
+                cc_algo=metric.cc_algo,
+            )
+        )
+    return merged
+
+
+def build_nettop_fallback_index(
+    metrics: dict[TransportKey, NetTopMetrics],
+) -> dict[FallbackKey, NetTopMetrics]:
+    index: dict[FallbackKey, NetTopMetrics] = {}
+    for key, metric in metrics.items():
+        fallback = FallbackKey(
+            key.proto,
+            endpoint_port(key.local),
+            endpoint_port(key.foreign),
+            metric.pid,
+        )
+        if metric.pid is not None:
+            index[fallback] = metric
+    return index
+
+
+def connection_fallback_key(conn: TcpConnection) -> FallbackKey:
+    return FallbackKey(
+        conn.proto,
+        endpoint_port(conn.local),
+        endpoint_port(conn.foreign),
+        conn.pid,
+    )
+
+
+def csv_get(row: list[str], indexes: dict[str, int], name: str) -> str:
+    idx = indexes.get(name)
+    if idx is None or idx >= len(row):
+        return ""
+    return row[idx].strip()
+
+
+def parse_ms(value: str) -> float | None:
+    if not value:
+        return None
+    match = re.match(r"^([0-9.]+)\s*ms$", value.strip())
+    if not match:
+        return None
+    return float(match.group(1))
+
+
+def parse_optional_int(value: str) -> int | None:
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def normalize_endpoint(endpoint: str) -> str:
+    endpoint = endpoint.strip()
+    if endpoint in {"*.*", "*:*", "*"}:
+        return "*:*"
+
+    if endpoint.count(":") == 1 and "." in endpoint.split(":", 1)[0]:
+        host, port = endpoint.rsplit(":", 1)
+        return f"{host}:{port}"
+
+    if "." in endpoint:
+        host, port = endpoint.rsplit(".", 1)
+        if port == "*":
+            return f"{host}:*"
+        if port.isdigit():
+            return f"{host}:{port}"
+
+    return endpoint
+
+
+def endpoint_port(endpoint: str) -> int | None:
+    normalized = normalize_endpoint(endpoint)
+    if normalized.endswith(":*") or ":" not in normalized:
+        return None
+    _, port_text = normalized.rsplit(":", 1)
+    try:
+        return int(port_text)
+    except ValueError:
+        return None
+
+
+SERVICE_OVERRIDES = {
+    20: "ftp-data",
+    21: "ftp",
+    22: "ssh",
+    25: "smtp",
+    53: "dns",
+    80: "http",
+    110: "pop3",
+    123: "ntp",
+    143: "imap",
+    443: "https",
+    465: "smtps",
+    587: "smtp",
+    993: "imaps",
+    995: "pop3s",
+    3306: "mysql",
+    5432: "postgres",
+    5900: "vnc",
+    6379: "redis",
+    8000: "http-alt",
+    8080: "http-alt",
+    8443: "https-alt",
+    9200: "elasticsearch",
+    9418: "git",
+    27017: "mongodb",
+}
+
+
+def service_for_connection(conn: TcpConnection) -> str:
+    port = endpoint_port(conn.foreign)
+    if port is None:
+        port = endpoint_port(conn.local)
+    if port is None:
+        return "-"
+    if port in SERVICE_OVERRIDES:
+        return SERVICE_OVERRIDES[port]
+    try:
+        return socket.getservbyport(port, "tcp")
+    except OSError:
+        return str(port)
+
+
+STAT_PATTERNS = [
+    StatPattern("packets_sent", re.compile(r"^packet sent$")),
+    StatPattern("data_packets_sent", re.compile(r"^data packet .*byte\)$")),
+    StatPattern("data_packets_retransmitted", re.compile(r"^data packet .* retransmitted$")),
+    StatPattern("packets_received", re.compile(r"^packet received$")),
+    StatPattern("duplicate_acks", re.compile(r"^duplicate ack$")),
+    StatPattern("out_of_order_packets", re.compile(r"^out-of-order packet")),
+    StatPattern("packets_recovered_after_loss", re.compile(r"^packet recovered after loss$")),
+    StatPattern("connection_requests", re.compile(r"^connection request$")),
+    StatPattern("connections_established", re.compile(r"^connection established")),
+    StatPattern("connections_closed", re.compile(r"^connection closed")),
+    StatPattern("retransmit_timeouts", re.compile(r"^retransmit timeout$")),
+    StatPattern("sack_recovery_episodes", re.compile(r"^SACK recovery episode$")),
+    StatPattern("rack_recovery_episodes", re.compile(r"^RACK recovery episode$")),
+    StatPattern("probe_timeouts", re.compile(r"^probe timeout$")),
+    StatPattern("reordering_detected", re.compile(r"^time packet reordering was detected")),
+    StatPattern("open_sockets", re.compile(r"^open TCP sockets$")),
+]
+
+
+def parse_macos_tcp_stats(output: str) -> TcpStats:
+    counters: dict[str, int] = {}
+    for raw in output.splitlines():
+        match = re.match(r"^\s*(\d+)\s+(.+?)\s*$", raw)
+        if not match:
+            continue
+        value = int(match.group(1))
+        label = re.sub(r"\s+", " ", match.group(2)).strip()
+        for stat in STAT_PATTERNS:
+            if stat.pattern.search(label):
+                counters[stat.key] = value
+                break
+    return TcpStats(counters)
+
+
+def parse_int(value: str) -> int:
+    if value == "-":
+        return 0
+    return int(value)
+
+
+def compute_views(
+    snapshot: Snapshot,
+    previous: Snapshot | None,
+    first_seen: dict[ConnectionKey, float] | None = None,
+    order: dict[ConnectionKey, int] | None = None,
+) -> list[ConnectionView]:
+    previous_by_key = {c.key: c for c in previous.connections} if previous else {}
+    first_seen = first_seen or {}
+    order = order or {}
+
+    views: list[ConnectionView] = []
+    for conn in snapshot.connections:
+        prev = previous_by_key.get(conn.key)
+        if prev:
+            age_state = ""
+        else:
+            age_state = "new"
+        views.append(
+            ConnectionView(
+                conn=conn,
+                rx_rate=0.0,
+                tx_rate=0.0,
+                first_seen=first_seen.get(conn.key, snapshot.taken_at),
+                order=order.get(conn.key, gencnt_order(conn)),
+                age_state=age_state,
+            )
+        )
+    return views
+
+
+def compute_stat_rates(snapshot: Snapshot, previous: Snapshot | None) -> dict[str, float]:
+    if not previous:
+        return {}
+    elapsed = max(0.001, snapshot.taken_at - previous.taken_at)
+    rates: dict[str, float] = {}
+    keys = set(snapshot.stats.counters) | set(previous.stats.counters)
+    for key in keys:
+        delta = snapshot.stats.get(key) - previous.stats.get(key)
+        rates[key] = max(0, delta) / elapsed
+    return rates
+
+
+def gencnt_order(conn: TcpConnection) -> int:
+    try:
+        return int(conn.gencnt, 16)
+    except ValueError:
+        return 0
+
+
+def fmt_bytes(value: float) -> str:
+    units = ("B", "K", "M", "G", "T")
+    size = float(value)
+    for unit in units:
+        if abs(size) < 1024.0 or unit == units[-1]:
+            if unit == "B":
+                return f"{size:.0f}{unit}"
+            return f"{size:.1f}{unit}"
+        size /= 1024.0
+    return f"{size:.0f}B"
+
+
+def fmt_optional_bytes(value: int | None) -> str:
+    if value is None:
+        return "-"
+    return fmt_bytes(value)
+
+
+def fit_right(value: str, width: int) -> str:
+    return truncate(value, width).rjust(width)
+
+
+def fmt_total_rate(total: int, rate: float) -> str:
+    total_text = fit_right(fmt_bytes(total), TRANSFER_TOTAL_WIDTH)
+    rate_text = fit_right(fmt_bytes(rate), TRANSFER_RATE_WIDTH)
+    return f"{total_text} ({rate_text}/s)"
+
+
+def fmt_count(value: int | None) -> str:
+    if value is None:
+        return "-"
+    units = ("", "K", "M", "G")
+    size = float(value)
+    for unit in units:
+        if abs(size) < 1000.0 or unit == units[-1]:
+            return f"{size:.0f}{unit}" if unit == "" else f"{size:.1f}{unit}"
+        size /= 1000.0
+    return str(value)
+
+
+def fmt_ms(value: float | None) -> str:
+    if value is None:
+        return "-"
+    return f"{value:.0f}ms" if value >= 10 else f"{value:.1f}ms"
+
+
+def truncate(value: str, width: int) -> str:
+    if width <= 0:
+        return ""
+    if len(value) <= width:
+        return value
+    if width <= 3:
+        return value[:width]
+    return value[: width - 3] + "..."
+
+
+def render_once(snapshot: Snapshot, previous: Snapshot | None = None, limit: int = 30) -> str:
+    first_seen = {c.key: snapshot.taken_at for c in snapshot.connections}
+    order = {c.key: gencnt_order(c) for c in snapshot.connections}
+    views = compute_views(snapshot, previous, first_seen, order)
+    views.sort(key=lambda v: (v.first_seen, v.order, v.conn.key), reverse=True)
+    stat_rates = compute_stat_rates(snapshot, previous)
+    counts = Counter(c.state for c in snapshot.connections)
+
+    lines = [
+        f"{snapshot.provider} {format_time(snapshot.taken_at)} "
+        f"total={len(snapshot.connections)} established={counts['ESTABLISHED']} "
+        f"listen={counts['LISTEN']} close_wait={counts['CLOSE_WAIT']}",
+    ]
+    if snapshot.errors:
+        lines.extend(f"error: {err}" for err in snapshot.errors)
+    lines.append(
+        f"loss~=retrans_packets:{snapshot.stats.get('data_packets_retransmitted')} "
+        f"retrans/s={stat_rates.get('data_packets_retransmitted', 0.0):.2f} "
+        f"rto/s={stat_rates.get('retransmit_timeouts', 0.0):.2f} "
+        f"ooo/s={stat_rates.get('out_of_order_packets', 0.0):.2f}"
+    )
+    lines.append(
+        format_row(header_row(), width=10_000)
+    )
+    for view in views[:limit]:
+        lines.append(format_row(display_row_for_view(view), width=10_000))
+    return "\n".join(lines)
+
+
+def run_tui(provider: TcpProvider, interval: float, include_all: bool) -> None:
+    curses.wrapper(TuiApp(provider, interval, include_all).run)
+
+
+class TuiApp:
+    """Curses event loop and mutable runtime state for tcpview."""
+
+    def __init__(self, provider: TcpProvider, interval: float, include_all: bool):
+        self.provider = provider
+        self.interval = interval
+        self.show_all = include_all
+        self.latest: Snapshot | None = None
+        self.previous_for_delta: Snapshot | None = None
+        self.slots = SlotTable()
+        self.next_refresh = 0.0
+        self.last_error = ""
+
+    def run(self, stdscr: curses.window) -> None:
+        self._configure_curses(stdscr)
+        while True:
+            now = time.monotonic()
+            if now >= self.next_refresh:
+                self.refresh(now)
+            self.draw(stdscr)
+            if self.handle_key(stdscr.getch(), stdscr):
+                break
+
+    def refresh(self, now: float) -> None:
+        """Read provider data and merge it into the stable slot table."""
+        try:
+            self.previous_for_delta = self.latest
+            self.latest = self.provider.snapshot()
+            self.slots.update(
+                self.latest,
+                self.previous_for_delta,
+                show_all=self.show_all,
+                now=time.monotonic(),
+                is_initial=self.previous_for_delta is None,
+            )
+        except Exception as exc:  # Defensive: keep the TUI alive.
+            self.last_error = f"{type(exc).__name__}: {exc}"
+        self.next_refresh = now + self.interval
+
+    def draw(self, stdscr: curses.window) -> None:
+        if self.latest:
+            draw(stdscr, self.latest, self.previous_for_delta, self.slots, self.show_all, self.last_error)
+        else:
+            draw_empty(stdscr, self.provider.name, self.last_error)
+
+    def handle_key(self, key: int, stdscr: curses.window) -> bool:
+        if key in (ord("q"), ord("Q"), 27):
+            return True
+        if key in (ord("h"), ord("H")):
+            open_help_pager(stdscr)
+        elif key in (ord("a"), ord("A")):
+            self.show_all = not self.show_all
+        return False
+
+    def _configure_curses(self, stdscr: curses.window) -> None:
+        curses.curs_set(0)
+        stdscr.nodelay(True)
+        stdscr.timeout(100)
+        if curses.has_colors():
+            init_color_pairs()
+
+
+def init_color_pairs() -> None:
+    """Register color pairs used by cell and row highlight logic."""
+    curses.start_color()
+    curses.use_default_colors()
+    curses.init_pair(1, curses.COLOR_GREEN, -1)
+    curses.init_pair(2, curses.COLOR_YELLOW, -1)
+    curses.init_pair(3, curses.COLOR_RED, -1)
+    curses.init_pair(4, curses.COLOR_CYAN, -1)
+    curses.init_pair(5, curses.COLOR_WHITE, -1)
+    curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_CYAN)
+    curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_GREEN)
+    curses.init_pair(8, curses.COLOR_WHITE, curses.COLOR_RED)
+    orange = 166 if curses.COLORS > 166 else curses.COLOR_YELLOW
+    curses.init_pair(9, curses.COLOR_BLACK, orange)
+    curses.init_pair(10, curses.COLOR_BLACK, curses.COLOR_YELLOW)
+    curses.init_pair(11, orange, -1)
+
+
+def should_slot_view(view: ConnectionView, show_all: bool) -> bool:
+    return show_all or view.conn.state not in {"LISTEN", "TIME_WAIT"}
+
+
+def update_slot_activity(slot: RowSlot, view: ConnectionView, now: float, is_new: bool) -> ConnectionView:
+    rx_total = view.conn.rx_bytes
+    tx_total = view.conn.tx_bytes
+    retrans_total = view.conn.retransmits
+    rx_dupe_total = view.conn.rx_dupe
+    rx_ooo_total = view.conn.rx_ooo
+    tx_win_value = view.conn.tx_win
+    tx_cwin_value = view.conn.tx_cwin
+    if is_new:
+        slot.rx_total = rx_total
+        slot.tx_total = tx_total
+        slot.sampled_at = now
+        slot.retrans_total = retrans_total
+        slot.rx_dupe_total = rx_dupe_total
+        slot.rx_ooo_total = rx_ooo_total
+        slot.tx_win_value = tx_win_value
+        slot.tx_cwin_value = tx_cwin_value
+        slot.rx_highlight_until = 0.0
+        slot.tx_highlight_until = 0.0
+        slot.rx_soft_highlight_until = 0.0
+        slot.tx_soft_highlight_until = 0.0
+        slot.retrans_highlight_until = 0.0
+        slot.retrans_soft_highlight_until = 0.0
+        slot.rx_dupe_highlight_until = 0.0
+        slot.rx_dupe_soft_highlight_until = 0.0
+        slot.rx_ooo_highlight_until = 0.0
+        slot.rx_ooo_soft_highlight_until = 0.0
+        slot.tx_win_good_until = 0.0
+        slot.tx_win_bad_until = 0.0
+        slot.tx_win_soft_good_until = 0.0
+        slot.tx_win_soft_bad_until = 0.0
+        slot.tx_cwin_good_until = 0.0
+        slot.tx_cwin_bad_until = 0.0
+        slot.tx_cwin_soft_good_until = 0.0
+        slot.tx_cwin_soft_bad_until = 0.0
+        return replace(view, rx_rate=0.0, tx_rate=0.0)
+
+    elapsed = max(0.001, now - slot.sampled_at) if slot.sampled_at else 0.001
+    rx_delta = max(0, rx_total - slot.rx_total)
+    tx_delta = max(0, tx_total - slot.tx_total)
+    if rx_delta >= TRANSFER_HIGHLIGHT_DELTA_BYTES:
+        slot.rx_highlight_until = now + TREND_HOLD_SECONDS
+        slot.rx_soft_highlight_until = 0.0
+    elif rx_delta > 0:
+        slot.rx_soft_highlight_until = now + TREND_HOLD_SECONDS
+    if tx_delta >= TRANSFER_HIGHLIGHT_DELTA_BYTES:
+        slot.tx_highlight_until = now + TREND_HOLD_SECONDS
+        slot.tx_soft_highlight_until = 0.0
+    elif tx_delta > 0:
+        slot.tx_soft_highlight_until = now + TREND_HOLD_SECONDS
+    update_counter_trend(
+        retrans_total,
+        slot.retrans_total,
+        RETRANS_STRONG_DELTA_BYTES,
+        now,
+        strong=lambda until: setattr(slot, "retrans_highlight_until", until),
+        soft=lambda until: setattr(slot, "retrans_soft_highlight_until", until),
+    )
+    update_counter_trend(
+        rx_dupe_total,
+        slot.rx_dupe_total,
+        DISORDER_STRONG_DELTA_COUNT,
+        now,
+        strong=lambda until: setattr(slot, "rx_dupe_highlight_until", until),
+        soft=lambda until: setattr(slot, "rx_dupe_soft_highlight_until", until),
+    )
+    update_counter_trend(
+        rx_ooo_total,
+        slot.rx_ooo_total,
+        DISORDER_STRONG_DELTA_COUNT,
+        now,
+        strong=lambda until: setattr(slot, "rx_ooo_highlight_until", until),
+        soft=lambda until: setattr(slot, "rx_ooo_soft_highlight_until", until),
+    )
+    update_window_trend(slot, "tx_win", tx_win_value, now)
+    update_window_trend(slot, "tx_cwin", tx_cwin_value, now)
+    slot.rx_total = rx_total
+    slot.tx_total = tx_total
+    slot.sampled_at = now
+    slot.retrans_total = retrans_total
+    slot.rx_dupe_total = rx_dupe_total
+    slot.rx_ooo_total = rx_ooo_total
+    return replace(view, rx_rate=rx_delta / elapsed, tx_rate=tx_delta / elapsed)
+
+
+def update_window_trend(slot: RowSlot, name: str, current: int | None, now: float) -> None:
+    if name == "tx_win":
+        previous = slot.tx_win_value
+    else:
+        previous = slot.tx_cwin_value
+
+    if current is None:
+        if name == "tx_win":
+            slot.tx_win_value = None
+            slot.tx_win_good_until = 0.0
+            slot.tx_win_bad_until = 0.0
+            slot.tx_win_soft_good_until = 0.0
+            slot.tx_win_soft_bad_until = 0.0
+        else:
+            slot.tx_cwin_value = None
+            slot.tx_cwin_good_until = 0.0
+            slot.tx_cwin_bad_until = 0.0
+            slot.tx_cwin_soft_good_until = 0.0
+            slot.tx_cwin_soft_bad_until = 0.0
+        return
+
+    strong_good_until = 0.0
+    strong_bad_until = 0.0
+    soft_good_until = 0.0
+    soft_bad_until = 0.0
+    if current is not None and previous is not None:
+        is_large = is_large_window_delta(current, previous)
+        if current > previous:
+            if is_large:
+                strong_good_until = now + TREND_HOLD_SECONDS
+            else:
+                soft_good_until = now + TREND_HOLD_SECONDS
+        elif current < previous:
+            if is_large:
+                strong_bad_until = now + TREND_HOLD_SECONDS
+            else:
+                soft_bad_until = now + TREND_HOLD_SECONDS
+
+    if name == "tx_win":
+        slot.tx_win_value = current
+        if strong_good_until:
+            slot.tx_win_good_until = strong_good_until
+            slot.tx_win_bad_until = 0.0
+            slot.tx_win_soft_good_until = 0.0
+            slot.tx_win_soft_bad_until = 0.0
+        elif strong_bad_until:
+            slot.tx_win_bad_until = strong_bad_until
+            slot.tx_win_good_until = 0.0
+            slot.tx_win_soft_good_until = 0.0
+            slot.tx_win_soft_bad_until = 0.0
+        elif soft_good_until:
+            slot.tx_win_soft_good_until = soft_good_until
+            slot.tx_win_soft_bad_until = 0.0
+        elif soft_bad_until:
+            slot.tx_win_soft_bad_until = soft_bad_until
+            slot.tx_win_soft_good_until = 0.0
+    else:
+        slot.tx_cwin_value = current
+        if strong_good_until:
+            slot.tx_cwin_good_until = strong_good_until
+            slot.tx_cwin_bad_until = 0.0
+            slot.tx_cwin_soft_good_until = 0.0
+            slot.tx_cwin_soft_bad_until = 0.0
+        elif strong_bad_until:
+            slot.tx_cwin_bad_until = strong_bad_until
+            slot.tx_cwin_good_until = 0.0
+            slot.tx_cwin_soft_good_until = 0.0
+            slot.tx_cwin_soft_bad_until = 0.0
+        elif soft_good_until:
+            slot.tx_cwin_soft_good_until = soft_good_until
+            slot.tx_cwin_soft_bad_until = 0.0
+        elif soft_bad_until:
+            slot.tx_cwin_soft_bad_until = soft_bad_until
+            slot.tx_cwin_soft_good_until = 0.0
+
+
+def update_counter_trend(
+    current: int | None,
+    previous: int | None,
+    strong_delta: int,
+    now: float,
+    strong: Callable[[float], None],
+    soft: Callable[[float], None],
+) -> None:
+    if current is None or previous is None:
+        return
+    delta = current - previous
+    if delta <= 0:
+        return
+    if delta >= strong_delta:
+        strong(now + TREND_HOLD_SECONDS)
+        soft(0.0)
+    else:
+        soft(now + TREND_HOLD_SECONDS)
+
+
+def is_large_window_delta(current: int, previous: int) -> bool:
+    delta = abs(current - previous)
+    if delta >= WINDOW_STRONG_DELTA_BYTES:
+        return True
+    if previous <= 0:
+        return delta > 0
+    return delta / previous >= WINDOW_STRONG_DELTA_RATIO
+
+
+def draw(
+    stdscr: curses.window,
+    snapshot: Snapshot,
+    previous: Snapshot | None,
+    slots: SlotTable,
+    show_all: bool,
+    last_error: str,
+) -> None:
+    height, width = stdscr.getmaxyx()
+    stdscr.erase()
+
+    stat_rates = compute_stat_rates(snapshot, previous)
+    counts = Counter(c.state for c in snapshot.connections)
+
+    title = (
+        f"TCP quality {format_time(snapshot.taken_at)} "
+        f"provider={snapshot.provider} "
+        f"interval={interval_hint(snapshot, previous)}"
+    )
+    add(stdscr, 0, 0, truncate(title, width), curses.A_BOLD)
+
+    summary = (
+        f"total={len(snapshot.connections)} est={counts['ESTABLISHED']} "
+        f"listen={counts['LISTEN']} close_wait={counts['CLOSE_WAIT']} "
+        f"syn={counts['SYN_SENT'] + counts['SYN_RCVD']} "
+        f"loss~=retrans_packets:{snapshot.stats.get('data_packets_retransmitted')} "
+        f"retrans/s={stat_rates.get('data_packets_retransmitted', 0.0):.2f} "
+        f"rto/s={stat_rates.get('retransmit_timeouts', 0.0):.2f} "
+        f"ooo/s={stat_rates.get('out_of_order_packets', 0.0):.2f}"
+    )
+    add(stdscr, 1, 0, truncate(summary, width), curses.A_NORMAL)
+
+    errors = list(snapshot.errors)
+    if last_error:
+        errors.append(last_error)
+    if errors:
+        add(stdscr, 2, 0, truncate("error: " + " | ".join(errors), width), curses.color_pair(3))
+    else:
+        now = time.monotonic()
+        max_rows = visible_row_capacity(height)
+        visible_slots = slots.visible_slots(max_rows, show_all, now)
+        visible_count = slots.count_renderable(visible_slots, show_all, now)
+        total_count = slots.count_renderable(slots.slots, show_all, now)
+        overflow = max(0, total_count - visible_count)
+        add(
+            stdscr,
+            2,
+            0,
+            truncate(
+                f"mode={'all' if show_all else 'active'} rows={min(len(slots), max_rows)}/{len(slots)} "
+                f"shown={visible_count}/{total_count} "
+                f"overflow={overflow} "
+                "keys: h help, q quit, a all",
+                width,
+            ),
+            curses.color_pair(4),
+        )
+
+    header = format_row(header_row(), width)
+    add(stdscr, 4, 0, header, curses.A_BOLD)
+
+    now = time.monotonic()
+    max_rows = visible_row_capacity(height)
+    for idx, slot in enumerate(slots.visible_slots(max_rows, show_all, now), start=5):
+        if not should_render_slot(slot, show_all, now):
+            add(stdscr, idx, 0, "", curses.A_NORMAL)
+            continue
+        draw_connection_row(stdscr, idx, slot, width, now)
+
+    stdscr.refresh()
+
+
+def visible_row_capacity(height: int) -> int:
+    return max(0, height - 5)
+
+
+def should_render_slot(slot: RowSlot, show_all: bool, now: float) -> bool:
+    view = slot.view
+    if view is None:
+        return False
+    if slot.is_ended(now):
+        return True
+    return show_all or view.conn.state not in {"LISTEN", "TIME_WAIT"}
+
+
+def draw_empty(stdscr: curses.window, provider_name: str, last_error: str) -> None:
+    height, width = stdscr.getmaxyx()
+    stdscr.erase()
+    add(stdscr, 0, 0, truncate(f"TCP quality provider={provider_name}", width), curses.A_BOLD)
+    message = last_error or "collecting..."
+    add(stdscr, min(2, height - 1), 0, truncate(message, width), curses.color_pair(3))
+    stdscr.refresh()
+
+
+HELP_TEXT = """\
+TCP quality TUI help
+====================
+
+This tool shows macOS TCP connection state using kernel netstat data enriched
+with per-connection nettop metrics.  It is a diagnosis aid, not a speed test.
+The most useful readings come from combinations of fields, trends, and whether
+the connection is sending or receiving meaningful data.
+
+
+Keys
+----
+
+  h       Open this help in less.
+  a       Toggle active rows vs all rows. Active mode hides LISTEN/TIME_WAIT.
+  q       Quit.
+  Esc     Quit.
+
+
+Row behavior
+------------
+
+Rows are stable slots.  Existing visible rows do not shift just because other
+connections changed.  If a visible slot becomes empty, an offscreen displayable
+connection may be moved into that empty slot.  Other visible rows are left in
+place.
+
+  cyan row       Newly observed connection.
+  orange STATE   CLOSE_WAIT text.
+  orange row     Any row during its final second before removal; STATE is ENDED.
+
+If a row is going away for any reason, its background turns orange for one
+second before the slot becomes reusable.  During that orange removal window the
+STATE field is shown as ENDED.  New or offscreen connections prefer
+reusable/empty rows near the top.
+
+
+Fields
+------
+
+STATE
+  TCP state.  ESTABLISHED is normal active TCP.  SYN_SENT means a connection is
+  being opened.  CLOSE_WAIT means the peer closed but the local application has
+  not closed its side yet; persistent CLOSE_WAIT is usually an application
+  cleanup issue, not directly network quality.  ENDED is not a kernel state; it
+  is a one-second TUI removal marker and should always appear with orange row
+  background.
+
+SVC
+  Service guessed from destination TCP port, such as https, ssh, smtp, or the
+  raw port number when unknown.  This is only a port-based guess.
+
+RTT
+  Average round-trip time from nettop.  It is the time scale at which TCP gets
+  feedback from ACKs.  High RTT is not packet loss by itself, but it amplifies
+  the cost of a small congestion window.  A rough throughput ceiling for a
+  single sending TCP flow is:
+
+      throughput ~= CWND / RTT
+
+  Example: CWND 93KB and RTT 640ms is roughly 145KB/s.
+
+RETRANS
+  nettop re-tx.  Treat this as retransmitted data amount, effectively bytes,
+  not a clean packet count.  It is one of the strongest quality warning signals.
+  If RETRANS increases while CWND falls, the sender is likely reacting to
+  loss/congestion.
+
+RWND
+  tx_win from nettop.  Receiver Window, the peer/receiver-side advertised send
+  allowance: roughly how much the other side says it can receive from us.  If
+  RWND is the smaller limit, the receiver or its application may be the
+  bottleneck.
+
+CWND
+  tx_cwin from nettop.  Congestion Window, the congestion-control send
+  allowance: how much unACKed data our TCP is willing to have in flight.  It
+  reflects the sender's estimate of what the network path can tolerate.  It is
+  useful mainly for traffic we are sending.  During mostly-receive traffic, CWND
+  can be small without meaning the receive path is bad.
+
+DUP
+  rx_dupe from nettop.  Duplicate receive signal.  Nonzero or increasing values
+  can indicate retransmission artifacts, ACK/loss side effects, reordering, or
+  unstable paths.  It is a supporting signal, not a standalone verdict.
+
+OOO
+  rx_ooo from nettop.  Out-of-order receive signal.  Increasing OOO can point
+  to path reordering, wireless/VPN/tunnel behavior, or multipath effects.  Some
+  OOO can happen without user-visible trouble; watch it with RX, RTT, and
+  RETRANS.
+
+RX
+  Receive total and receive rate computed from kernel rx byte counters.  The
+  display is total plus current rate, for example 129M (500K/s).  This is the
+  most direct throughput indicator when downloading/receiving data.
+
+TX
+  Send total and send rate computed from kernel tx byte counters.  The display
+  is total plus current rate, for example 42M (1.2M/s).  This is the most
+  direct throughput indicator when uploading/sending data.
+
+PATH
+  Interface plus congestion-control algorithm, for example en0/cubic or
+  utun12/cubic.  utun often means VPN/tunnel.  en0 is usually Wi-Fi on macOS.
+
+DESTINATION
+  Remote endpoint.  For IPv6, netstat may truncate columns; this tool prefers
+  the fuller endpoint from nettop when available.
+
+PROCESS
+  Process name and pid as reported by netstat/nettop.
+
+
+Colors and trend indicators
+---------------------------
+
+  green cell
+    A large useful/increasing signal.  RX/TX use green background when total
+    bytes increased by at least 64KiB during one refresh.  RWND/CWND use green
+    background when the window increased by at least 64KiB or 25%.
+
+  green text
+    A small useful/increasing signal.  RX/TX had a small positive byte delta,
+    or RWND/CWND increased but did not cross the large-change threshold.
+
+  red cell
+    A large worsening signal.  RETRANS uses red background when retransmitted
+    data increased by at least 64KiB during one refresh.  RWND/CWND use red
+    background when the window decreased by at least 64KiB or 25%.
+
+  red text
+    A small worsening signal.  RETRANS increased but did not cross the
+    large-change threshold, or RWND/CWND decreased by a small amount.  Very
+    high RTT also uses red text because it is an absolute warning, not a delta.
+
+  yellow cell
+    A large receive-disorder signal.  DUP/OOO use yellow background when their
+    counters increased by at least 10 during one refresh.
+
+  yellow text
+    Warning but not necessarily severe.  Moderate RTT may show yellow text.
+    DUP/OOO also use yellow text for small positive counter deltas.
+
+  orange STATE
+    CLOSE_WAIT.  CLOSE_WAIT often points to local application behavior.
+
+  orange row
+    A row is about to be removed for any reason.  The full-row background is
+    shown for one second before the slot becomes empty/reusable.  The STATE
+    field is ENDED during this one-second removal window.
+
+Trends are retained for a few seconds so short changes are visible.
+
+
+Diagnosis guide
+---------------
+
+1. First decide direction.
+
+   Mostly receiving:
+     Focus on RX, RTT, RETRANS, DUP, and OOO.  CWND is sender-side and may
+     not mean much if we are not sending data beyond ACK/control traffic.
+
+   Mostly sending:
+     Focus on TX, RTT, RETRANS, RWND, and CWND.  Sending throughput is
+     bounded by receiver allowance, congestion-control allowance, and RTT.
+
+2. Check actual throughput.
+
+   RX or TX rate is the result that matters.  Window and RTT fields explain why
+   the result may be high or low.
+
+3. Interpret RWND vs CWND.
+
+   RWND < CWND:
+     The remote receiver/application may be limiting us.
+
+   CWND < RWND:
+     The network path/congestion-control side is the smaller limit.
+
+   Both large, but TX rate low:
+     The application may not be sending much, or another bottleneck exists.
+
+   Both small:
+     Could be a new/idle connection, receiver limitation, or poor network path.
+     Use RTT and RETRANS to separate those cases.
+
+4. Combine CWND and RTT for sending.
+
+   A small CWND is not automatically bad.  It is bad relative to RTT and the
+   throughput you expect.  Use:
+
+       approximate single-flow send ceiling ~= CWND / RTT
+
+   High RTT requires a larger CWND to achieve the same throughput.
+
+5. Watch retransmission and reordering signals.
+
+   RETRANS increasing:
+     Strong sign of loss/congestion/retransmission behavior.
+
+   DUP/OOO increasing:
+     Supporting evidence of receive-side disorder, reordering, retransmission
+     artifacts, or path instability.  More useful when paired with falling RX
+     or rising RTT.
+
+6. Interpret RTT carefully.
+
+   High RTT can simply mean a distant endpoint, VPN, satellite/mobile path, or
+   overloaded tunnel.  High RTT plus falling throughput and increasing RETRANS
+   is much more suspicious than high RTT alone.
+
+
+Common patterns
+---------------
+
+Good receive flow:
+  RX rate stable or high, RETRANS not increasing, DUP/OOO quiet, RTT stable.
+
+Bad receive flow:
+  RX rate drops or oscillates, RETRANS increases, DUP/OOO increases, RTT jumps.
+
+Good send flow:
+  TX rate is near expected, CWND stable or rising, RWND is not the smaller
+  bottleneck, RETRANS quiet.
+
+Network/congestion-limited send:
+  CWND < RWND, CWND falling or small relative to RTT, RETRANS increasing.
+
+Receiver-limited send:
+  RWND < CWND.  The peer or peer application is likely limiting receive
+  capacity.
+
+Application-limited:
+  RWND and CWND both look sufficient, RTT is sane, RETRANS quiet, but RX or TX
+  rate is low.  The application may simply not be moving data.
+
+Local app cleanup issue:
+  Persistent CLOSE_WAIT.  The remote closed; local process has not closed the
+  socket.  This is usually not a raw network-quality problem.
+
+VPN/tunnel path issue:
+  PATH is utun*/cubic, RTT is high or unstable, DUP/OOO/RETRANS rise.  Compare
+  with the same endpoint outside the VPN if possible.
+
+
+Limitations
+-----------
+
+macOS does not expose all Linux ss -ti style TCP internals through netstat.
+This tool uses what netstat and nettop expose.  Some fields are best understood
+as practical signals, not exact protocol counters with perfect directionality.
+
+RETRANS is treated as retransmitted data amount.  It is not a clean peer
+retransmit packet count.  DUP and OOO are supporting receive-side signals, not
+absolute proof of packet loss.
+"""
+
+
+def open_help_pager(stdscr: curses.window) -> None:
+    curses.def_prog_mode()
+    curses.endwin()
+    try:
+        subprocess.run(["less", "-R"], input=HELP_TEXT, text=True, check=False)
+    finally:
+        curses.reset_prog_mode()
+        stdscr.clear()
+        stdscr.refresh()
+
+
+def interval_hint(snapshot: Snapshot, previous: Snapshot | None) -> str:
+    if not previous:
+        return "first"
+    return f"{snapshot.taken_at - previous.taken_at:.1f}s"
+
+
+def header_row() -> DisplayRow:
+    return DisplayRow(
+        state="STATE",
+        svc="SVC",
+        rtt="RTT",
+        retrans="RETRANS",
+        tx_win="RWND",
+        tx_cwin="CWND",
+        rx_dupe="DUP",
+        rx_ooo="OOO",
+        rx_rate="RX",
+        tx_rate="TX",
+        path="PATH",
+        destination="DESTINATION",
+        process="PROCESS",
+    )
+
+
+def display_row_for_view(view: ConnectionView) -> DisplayRow:
+    c = view.conn
+    destination = c.display_foreign or normalize_endpoint(c.foreign)
+    return DisplayRow(
+        state=display_state(c.state),
+        svc=service_for_connection(c),
+        rtt=fmt_ms(c.rtt_avg_ms),
+        retrans=fmt_count(c.retransmits),
+        tx_win=fmt_optional_bytes(c.tx_win),
+        tx_cwin=fmt_optional_bytes(c.tx_cwin),
+        rx_dupe=fmt_count(c.rx_dupe),
+        rx_ooo=fmt_count(c.rx_ooo),
+        rx_rate=fmt_total_rate(c.rx_bytes, view.rx_rate),
+        tx_rate=fmt_total_rate(c.tx_bytes, view.tx_rate),
+        path=truncate(path_label(c), 11),
+        destination=truncate(destination, 28),
+        process=truncate(process_label(c), 32),
+    )
+
+
+def display_state(state: str) -> str:
+    normalized = state.upper()
+    if normalized in {"FIN_WAIT_1", "FINWAIT1", "FIN_WAIT1"}:
+        return "FIN_WAIT"
+    return state
+
+
+def display_row_for_slot(slot: RowSlot, now: float) -> DisplayRow:
+    if slot.view is None:
+        return header_row()
+    row = display_row_for_view(slot.view)
+    if slot.is_ended(now):
+        return replace(row, state="ENDED")
+    return row
+
+
+def format_row(row: DisplayRow, width: int) -> str:
+    if width >= 150:
+        text = (
+            f"{row.state:<13} {row.svc:<10} {row.rtt:>7} {row.retrans:>7} "
+            f"{row.tx_win:>7} {row.tx_cwin:>7} "
+            f"{row.rx_dupe:>6} {row.rx_ooo:>6} "
+            f"{row.rx_rate:>{TRANSFER_CELL_WIDTH}} {row.tx_rate:>{TRANSFER_CELL_WIDTH}} "
+            f"{row.path:<11} {row.destination:<24} {row.process}"
+        )
+    elif width >= 110:
+        text = (
+            f"{row.state:<12} {row.svc:<8} {row.rtt:>7} {row.retrans:>7} "
+            f"{row.tx_win:>7} {row.tx_cwin:>7} "
+            f"{row.rx_dupe:>5} {row.rx_ooo:>5} "
+            f"{row.rx_rate:>{TRANSFER_CELL_WIDTH}} {row.tx_rate:>{TRANSFER_CELL_WIDTH}} "
+            f"{row.path:<10} {row.destination:<18} {row.process}"
+        )
+    else:
+        text = (
+            f"{row.state:<10} {row.svc:<7} {row.rtt:>7} {row.retrans:>7} "
+            f"{row.tx_cwin:>7} "
+            f"{row.path:<9} {row.destination:<24} {row.process}"
+        )
+    return truncate(text, width)
+
+
+def format_connection_row(view: ConnectionView, width: int) -> str:
+    return format_row(display_row_for_view(view), width)
+
+
+def draw_connection_row(stdscr: curses.window, y: int, slot: RowSlot, width: int, now: float) -> None:
+    if slot.view is None:
+        return
+    row = format_row(display_row_for_slot(slot, now), width)
+    base_attr = row_attr(slot, now)
+    add(stdscr, y, 0, row.ljust(max(0, width - 1)), base_attr)
+    if base_attr:
+        return
+
+    cells = connection_cells(slot, now)
+    x = 0
+    for cell in cells_for_width(cells, width):
+        if cell.attr:
+            add(stdscr, y, x, truncate(cell.render(), max(0, width - x)), cell.attr)
+        x += cell.width + 1
+
+
+def row_attr(slot: RowSlot, now: float) -> int:
+    if slot.is_ended(now) and slot.ended_until - now <= ENDED_FLASH_SECONDS:
+        return curses.color_pair(9)
+    if slot.view and slot.view.age_state == "new":
+        return curses.color_pair(6)
+    return curses.A_NORMAL
+
+
+def connection_cells(slot: RowSlot, now: float) -> list[Cell]:
+    if slot.view is None:
+        return []
+    view = slot.view
+    c = view.conn
+    row = display_row_for_slot(slot, now)
+    state = display_state(c.state)
+    if slot.is_ended(now) or state == "CLOSE_WAIT":
+        state_attr = curses.color_pair(11)
+    elif state in {"SYN_SENT", "SYN_RCVD"}:
+        state_attr = curses.color_pair(3)
+    else:
+        state_attr = 0
+    rtt_attr = 0
+    if c.rtt_avg_ms is not None:
+        if not rtt_attr and c.rtt_avg_ms >= 250:
+            rtt_attr = curses.color_pair(3)
+        elif not rtt_attr and c.rtt_avg_ms >= 120:
+            rtt_attr = curses.color_pair(2)
+    retrans_attr = counter_attr(slot.retrans_highlight_until, slot.retrans_soft_highlight_until, now, 8, 3)
+    rx_dupe_attr = counter_attr(slot.rx_dupe_highlight_until, slot.rx_dupe_soft_highlight_until, now, 10, 2)
+    rx_ooo_attr = counter_attr(slot.rx_ooo_highlight_until, slot.rx_ooo_soft_highlight_until, now, 10, 2)
+    tx_win_attr = trend_attr(
+        slot.tx_win_good_until,
+        slot.tx_win_bad_until,
+        slot.tx_win_soft_good_until,
+        slot.tx_win_soft_bad_until,
+        now,
+    )
+    tx_cwin_attr = trend_attr(
+        slot.tx_cwin_good_until,
+        slot.tx_cwin_bad_until,
+        slot.tx_cwin_soft_good_until,
+        slot.tx_cwin_soft_bad_until,
+        now,
+    )
+    rx_attr = transfer_attr(slot.rx_highlight_until, slot.rx_soft_highlight_until, now)
+    tx_attr = transfer_attr(slot.tx_highlight_until, slot.tx_soft_highlight_until, now)
+
+    return [
+        Cell("state", row.state, 13, "<", state_attr),
+        Cell("svc", row.svc, 10, "<"),
+        Cell("rtt", row.rtt, 7, ">", rtt_attr),
+        Cell("retrans", row.retrans, 7, ">", retrans_attr),
+        Cell("tx_win", row.tx_win, 7, ">", tx_win_attr),
+        Cell("tx_cwin", row.tx_cwin, 7, ">", tx_cwin_attr),
+        Cell("rx_dupe", row.rx_dupe, 6, ">", rx_dupe_attr),
+        Cell("rx_ooo", row.rx_ooo, 6, ">", rx_ooo_attr),
+        Cell("rx", row.rx_rate, TRANSFER_CELL_WIDTH, ">", rx_attr),
+        Cell("tx", row.tx_rate, TRANSFER_CELL_WIDTH, ">", tx_attr),
+        Cell("path", row.path, 11, "<"),
+        Cell("destination", row.destination, 24, "<"),
+        Cell("process", row.process, 32, "<"),
+    ]
+
+
+def trend_attr(
+    good_until: float,
+    bad_until: float,
+    soft_good_until: float,
+    soft_bad_until: float,
+    now: float,
+) -> int:
+    if now < bad_until:
+        return curses.color_pair(8)
+    if now < good_until:
+        return curses.color_pair(7)
+    if now < soft_bad_until:
+        return curses.color_pair(3)
+    if now < soft_good_until:
+        return curses.color_pair(1)
+    return 0
+
+
+def transfer_attr(strong_until: float, soft_until: float, now: float) -> int:
+    if now < strong_until:
+        return curses.color_pair(7)
+    if now < soft_until:
+        return curses.color_pair(1)
+    return 0
+
+
+def counter_attr(strong_until: float, soft_until: float, now: float, strong_pair: int, soft_pair: int) -> int:
+    if now < strong_until:
+        return curses.color_pair(strong_pair)
+    if now < soft_until:
+        return curses.color_pair(soft_pair)
+    return 0
+
+
+def cells_for_width(cells: list[Cell], width: int) -> list[Cell]:
+    if width >= 150:
+        return cells
+    if width >= 110:
+        state, svc, rtt, retrans, tx_win, tx_cwin, rx_dupe, rx_ooo, rxs, txs, path, destination, proc = cells
+        return [
+            state.with_width(12),
+            svc.with_width(8),
+            rtt,
+            retrans,
+            tx_win,
+            tx_cwin,
+            rx_dupe.with_width(5),
+            rx_ooo.with_width(5),
+            rxs.with_width(TRANSFER_CELL_WIDTH),
+            txs.with_width(TRANSFER_CELL_WIDTH),
+            path.with_width(10),
+            destination.with_width(18),
+            proc,
+        ]
+    state, svc, rtt, retrans, _tx_win, tx_cwin, *_rest, path, destination, proc = cells
+    return [
+        state.with_width(10),
+        svc.with_width(7),
+        rtt,
+        retrans,
+        tx_cwin,
+        path.with_width(9),
+        destination.with_width(24),
+        proc,
+    ]
+
+
+def path_label(conn: TcpConnection) -> str:
+    if conn.interface and conn.cc_algo:
+        return f"{conn.interface}/{conn.cc_algo}"
+    return conn.interface or conn.cc_algo or "-"
+
+
+def process_label(conn: TcpConnection) -> str:
+    suffix = f":{conn.pid}" if conn.pid is not None else ""
+    return f"{conn.process}{suffix or ':-'}"
+
+
+def add(stdscr: curses.window, y: int, x: int, text: str, attr: int = 0) -> None:
+    height, width = stdscr.getmaxyx()
+    if y < 0 or y >= height or x >= width:
+        return
+    try:
+        stdscr.addstr(y, x, text[: max(0, width - x - 1)], attr)
+    except curses.error:
+        pass
+
+
+def format_time(timestamp: float) -> str:
+    return dt.datetime.fromtimestamp(timestamp).strftime("%H:%M:%S")
+
+
+def build_provider(args: argparse.Namespace) -> TcpProvider:
+    system = platform.system()
+    if system != "Darwin":
+        raise SystemExit(f"this script currently supports macOS only; detected {system}")
+    netstat = args.netstat or shutil.which("netstat") or "/usr/sbin/netstat"
+    nettop = args.nettop or shutil.which("nettop") or "/usr/bin/nettop"
+    return MacOSNetstatProvider(
+        netstat=netstat,
+        nettop=nettop,
+        include_listeners=True,
+        use_nettop=not args.no_nettop,
+    )
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Realtime macOS TCP connection quality TUI using kernel netstat data."
+    )
+    parser.add_argument("-i", "--interval", type=float, default=1.0, help="refresh interval seconds")
+    parser.add_argument("-n", "--limit", type=int, default=40, help="maximum rows to print with --once")
+    parser.add_argument("--all", action="store_true", help="start by showing LISTEN/TIME_WAIT rows too")
+    parser.add_argument("--once", action="store_true", help="print one snapshot and exit")
+    parser.add_argument("--netstat", default="", help="path to netstat binary")
+    parser.add_argument("--nettop", default="", help="path to nettop binary")
+    parser.add_argument("--no-nettop", action="store_true", help="disable nettop RTT/retransmit enrichment")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    if args.interval <= 0:
+        raise SystemExit("--interval must be positive")
+    provider = build_provider(args)
+
+    if args.once:
+        snapshot = provider.snapshot()
+        print(render_once(snapshot, limit=args.limit))
+        return 1 if snapshot.errors else 0
+
+    run_tui(provider, interval=args.interval, include_all=args.all)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
