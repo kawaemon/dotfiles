@@ -15,6 +15,7 @@ import argparse
 import csv
 import curses
 import datetime as dt
+import importlib.util
 import platform
 import re
 import shutil
@@ -24,6 +25,7 @@ import sys
 import time
 from collections import Counter
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Callable, Iterable, Protocol
 
 
@@ -160,6 +162,8 @@ class NetTopMetrics:
     pid: int | None = None
     local: str = ""
     foreign: str = ""
+    rx_bytes: int | None = None
+    tx_bytes: int | None = None
     interface: str = ""
     rtt_avg_ms: float | None = None
     rx_dupe: int | None = None
@@ -198,6 +202,12 @@ class RowSlot:
     rx_total: int = 0
     tx_total: int = 0
     sampled_at: float = 0.0
+    rx_sampled_at: float = 0.0
+    tx_sampled_at: float = 0.0
+    rx_display_rate: float = 0.0
+    tx_display_rate: float = 0.0
+    rx_rate_until: float = 0.0
+    tx_rate_until: float = 0.0
     retrans_total: int | None = None
     rx_dupe_total: int | None = None
     rx_ooo_total: int | None = None
@@ -221,6 +231,7 @@ class RowSlot:
     tx_cwin_bad_until: float = 0.0
     tx_cwin_soft_good_until: float = 0.0
     tx_cwin_soft_bad_until: float = 0.0
+    new_until: float = 0.0
     ended_until: float = 0.0
 
     def is_ended(self, now: float) -> bool:
@@ -235,6 +246,12 @@ class RowSlot:
         self.rx_total = 0
         self.tx_total = 0
         self.sampled_at = 0.0
+        self.rx_sampled_at = 0.0
+        self.tx_sampled_at = 0.0
+        self.rx_display_rate = 0.0
+        self.tx_display_rate = 0.0
+        self.rx_rate_until = 0.0
+        self.tx_rate_until = 0.0
         self.retrans_total = None
         self.rx_dupe_total = None
         self.rx_ooo_total = None
@@ -258,6 +275,7 @@ class RowSlot:
         self.tx_cwin_bad_until = 0.0
         self.tx_cwin_soft_good_until = 0.0
         self.tx_cwin_soft_bad_until = 0.0
+        self.new_until = 0.0
         self.ended_until = 0.0
 
     def begin_removal(self, now: float, hold_seconds: float) -> None:
@@ -381,6 +399,8 @@ class SlotTable:
 
 
 TREND_HOLD_SECONDS = 3.0
+NEW_HOLD_SECONDS = 1.0
+RATE_HOLD_SECONDS = 1.0
 ENDED_FLASH_SECONDS = 1.0
 TRANSFER_HIGHLIGHT_DELTA_BYTES = 64 * 1024
 RETRANS_STRONG_DELTA_BYTES = 64 * 1024
@@ -579,6 +599,8 @@ def parse_nettop_metrics(output: str) -> dict[TransportKey, NetTopMetrics]:
             pid=current_pid,
             local=key.local,
             foreign=key.foreign,
+            rx_bytes=parse_optional_int(csv_get(row, indexes, "bytes_in")),
+            tx_bytes=parse_optional_int(csv_get(row, indexes, "bytes_out")),
             interface=csv_get(row, indexes, "interface"),
             rtt_avg_ms=parse_ms(csv_get(row, indexes, "rtt_avg")),
             rx_dupe=parse_optional_int(csv_get(row, indexes, "rx_dupe")),
@@ -627,6 +649,8 @@ def merge_nettop_metrics(
                 conn,
                 display_local=metric.local,
                 display_foreign=metric.foreign,
+                rx_bytes=metric.rx_bytes if metric.rx_bytes is not None else conn.rx_bytes,
+                tx_bytes=metric.tx_bytes if metric.tx_bytes is not None else conn.tx_bytes,
                 interface=metric.interface,
                 rtt_avg_ms=metric.rtt_avg_ms,
                 rx_dupe=metric.rx_dupe,
@@ -709,6 +733,31 @@ def normalize_endpoint(endpoint: str) -> str:
     return endpoint
 
 
+def is_localhost_endpoint(endpoint: str) -> bool:
+    endpoint = endpoint.strip()
+    if endpoint in {"127.0.0.1", "::1"}:
+        return True
+    return endpoint.startswith((
+        "127.0.0.1:",
+        "127.0.0.1.",
+        "[::1]:",
+        "[::1].",
+        "::1:",
+        "::1.",
+    ))
+
+
+def is_localhost_destination(conn: TcpConnection) -> bool:
+    return is_localhost_endpoint(conn.display_foreign or conn.foreign)
+
+
+def without_localhost_destinations(snapshot: Snapshot) -> Snapshot:
+    return replace(
+        snapshot,
+        connections=[c for c in snapshot.connections if not is_localhost_destination(c)],
+    )
+
+
 def endpoint_port(endpoint: str) -> int | None:
     normalized = normalize_endpoint(endpoint)
     if normalized.endswith(":*") or ":" not in normalized:
@@ -746,6 +795,7 @@ SERVICE_OVERRIDES = {
     9418: "git",
     27017: "mongodb",
 }
+SERVICE_CACHE: dict[int, str] = {}
 
 
 def service_for_connection(conn: TcpConnection) -> str:
@@ -756,10 +806,14 @@ def service_for_connection(conn: TcpConnection) -> str:
         return "-"
     if port in SERVICE_OVERRIDES:
         return SERVICE_OVERRIDES[port]
+    if port in SERVICE_CACHE:
+        return SERVICE_CACHE[port]
     try:
-        return socket.getservbyport(port, "tcp")
+        service = socket.getservbyport(port, "tcp")
     except OSError:
-        return str(port)
+        service = str(port)
+    SERVICE_CACHE[port] = service
+    return service
 
 
 STAT_PATTERNS = [
@@ -961,6 +1015,7 @@ class TuiApp:
             if now >= self.next_refresh:
                 self.refresh(now)
             self.draw(stdscr)
+            self._set_input_timeout(stdscr)
             if self.handle_key(stdscr.getch(), stdscr):
                 break
 
@@ -968,7 +1023,7 @@ class TuiApp:
         """Read provider data and merge it into the stable slot table."""
         try:
             self.previous_for_delta = self.latest
-            self.latest = self.provider.snapshot()
+            self.latest = without_localhost_destinations(self.provider.snapshot())
             self.slots.update(
                 self.latest,
                 self.previous_for_delta,
@@ -997,10 +1052,15 @@ class TuiApp:
 
     def _configure_curses(self, stdscr: curses.window) -> None:
         curses.curs_set(0)
-        stdscr.nodelay(True)
-        stdscr.timeout(100)
+        stdscr.nodelay(False)
+        self._set_input_timeout(stdscr)
         if curses.has_colors():
             init_color_pairs()
+
+    def _set_input_timeout(self, stdscr: curses.window) -> None:
+        until_refresh = max(0.0, self.next_refresh - time.monotonic())
+        timeout_ms = max(10, min(250, int(until_refresh * 1000)))
+        stdscr.timeout(timeout_ms)
 
 
 def init_color_pairs() -> None:
@@ -1037,6 +1097,12 @@ def update_slot_activity(slot: RowSlot, view: ConnectionView, now: float, is_new
         slot.rx_total = rx_total
         slot.tx_total = tx_total
         slot.sampled_at = now
+        slot.rx_sampled_at = now
+        slot.tx_sampled_at = now
+        slot.rx_display_rate = 0.0
+        slot.tx_display_rate = 0.0
+        slot.rx_rate_until = 0.0
+        slot.tx_rate_until = 0.0
         slot.retrans_total = retrans_total
         slot.rx_dupe_total = rx_dupe_total
         slot.rx_ooo_total = rx_ooo_total
@@ -1060,11 +1126,13 @@ def update_slot_activity(slot: RowSlot, view: ConnectionView, now: float, is_new
         slot.tx_cwin_bad_until = 0.0
         slot.tx_cwin_soft_good_until = 0.0
         slot.tx_cwin_soft_bad_until = 0.0
+        slot.new_until = now + NEW_HOLD_SECONDS if view.age_state == "new" else 0.0
         return replace(view, rx_rate=0.0, tx_rate=0.0)
 
-    elapsed = max(0.001, now - slot.sampled_at) if slot.sampled_at else 0.001
     rx_delta = max(0, rx_total - slot.rx_total)
     tx_delta = max(0, tx_total - slot.tx_total)
+    rx_rate = update_transfer_rate(slot, "rx", rx_total, now)
+    tx_rate = update_transfer_rate(slot, "tx", tx_total, now)
     if rx_delta >= TRANSFER_HIGHLIGHT_DELTA_BYTES:
         slot.rx_highlight_until = now + TREND_HOLD_SECONDS
         slot.rx_soft_highlight_until = 0.0
@@ -1101,13 +1169,51 @@ def update_slot_activity(slot: RowSlot, view: ConnectionView, now: float, is_new
     )
     update_window_trend(slot, "tx_win", tx_win_value, now)
     update_window_trend(slot, "tx_cwin", tx_cwin_value, now)
-    slot.rx_total = rx_total
-    slot.tx_total = tx_total
     slot.sampled_at = now
     slot.retrans_total = retrans_total
     slot.rx_dupe_total = rx_dupe_total
     slot.rx_ooo_total = rx_ooo_total
-    return replace(view, rx_rate=rx_delta / elapsed, tx_rate=tx_delta / elapsed)
+    return replace(view, rx_rate=rx_rate, tx_rate=tx_rate)
+
+
+def update_transfer_rate(slot: RowSlot, direction: str, total: int, now: float) -> float:
+    if direction == "rx":
+        previous = slot.rx_total
+        sampled_at = slot.rx_sampled_at or now
+        display_rate = slot.rx_display_rate
+        rate_until = slot.rx_rate_until
+    else:
+        previous = slot.tx_total
+        sampled_at = slot.tx_sampled_at or now
+        display_rate = slot.tx_display_rate
+        rate_until = slot.tx_rate_until
+
+    delta = total - previous
+    if delta < 0:
+        rate = 0.0
+        sampled_at = now
+        rate_until = 0.0
+    elif delta > 0:
+        elapsed = max(0.001, now - sampled_at)
+        rate = delta / elapsed
+        sampled_at = now
+        rate_until = now + RATE_HOLD_SECONDS
+    elif rate_until > now:
+        rate = display_rate
+    else:
+        rate = 0.0
+
+    if direction == "rx":
+        slot.rx_total = total
+        slot.rx_sampled_at = sampled_at
+        slot.rx_display_rate = rate
+        slot.rx_rate_until = rate_until
+    else:
+        slot.tx_total = total
+        slot.tx_sampled_at = sampled_at
+        slot.tx_display_rate = rate
+        slot.tx_rate_until = rate_until
+    return rate
 
 
 def update_window_trend(slot: RowSlot, name: str, current: int | None, now: float) -> None:
@@ -1690,7 +1796,7 @@ def draw_connection_row(stdscr: curses.window, y: int, slot: RowSlot, width: int
 def row_attr(slot: RowSlot, now: float) -> int:
     if slot.is_ended(now) and slot.ended_until - now <= ENDED_FLASH_SECONDS:
         return curses.color_pair(9)
-    if slot.view and slot.view.age_state == "new":
+    if slot.new_until > now:
         return curses.color_pair(6)
     return curses.A_NORMAL
 
@@ -1843,10 +1949,32 @@ def format_time(timestamp: float) -> str:
     return dt.datetime.fromtimestamp(timestamp).strftime("%H:%M:%S")
 
 
+_DARWIN_PROVIDER_CLASS: type | None = None
+
+
+def darwin_provider_class() -> type:
+    global _DARWIN_PROVIDER_CLASS
+    if _DARWIN_PROVIDER_CLASS is not None:
+        return _DARWIN_PROVIDER_CLASS
+
+    module_path = Path(__file__).resolve().with_name("tcpview_darwin.py")
+    spec = importlib.util.spec_from_file_location("_tcpview_darwin_impl", module_path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"cannot load native backend module: {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    _DARWIN_PROVIDER_CLASS = module.MacOSNativeProvider
+    return _DARWIN_PROVIDER_CLASS
+
+
 def build_provider(args: argparse.Namespace) -> TcpProvider:
     system = platform.system()
     if system != "Darwin":
         raise SystemExit(f"this script currently supports macOS only; detected {system}")
+    if args.backend == "native":
+        MacOSNativeProvider = darwin_provider_class()
+        return MacOSNativeProvider(include_listeners=True, use_extended=not args.no_extended)
     netstat = args.netstat or shutil.which("netstat") or "/usr/sbin/netstat"
     nettop = args.nettop or shutil.which("nettop") or "/usr/bin/nettop"
     return MacOSNetstatProvider(
@@ -1865,10 +1993,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-n", "--limit", type=int, default=40, help="maximum rows to print with --once")
     parser.add_argument("--all", action="store_true", help="start by showing LISTEN/TIME_WAIT rows too")
     parser.add_argument("--once", action="store_true", help="print one snapshot and exit")
+    parser.add_argument("--backend", choices=("netstat", "native"), default="netstat", help="collection backend")
     parser.add_argument("--netstat", default="", help="path to netstat binary")
     parser.add_argument("--nettop", default="", help="path to nettop binary")
     parser.add_argument("--no-nettop", action="store_true", help="disable nettop RTT/retransmit enrichment")
+    parser.add_argument("--no-extended", action="store_true", help="disable native backend extended enrichment")
     return parser.parse_args(argv)
+
+
+def close_provider(provider: TcpProvider) -> None:
+    close = getattr(provider, "close", None)
+    if close:
+        close()
 
 
 def main(argv: list[str]) -> int:
@@ -1877,13 +2013,16 @@ def main(argv: list[str]) -> int:
         raise SystemExit("--interval must be positive")
     provider = build_provider(args)
 
-    if args.once:
-        snapshot = provider.snapshot()
-        print(render_once(snapshot, limit=args.limit))
-        return 1 if snapshot.errors else 0
+    try:
+        if args.once:
+            snapshot = without_localhost_destinations(provider.snapshot())
+            print(render_once(snapshot, limit=args.limit))
+            return 1 if snapshot.errors else 0
 
-    run_tui(provider, interval=args.interval, include_all=args.all)
-    return 0
+        run_tui(provider, interval=args.interval, include_all=args.all)
+        return 0
+    finally:
+        close_provider(provider)
 
 
 if __name__ == "__main__":
