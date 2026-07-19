@@ -751,10 +751,14 @@ def is_localhost_destination(conn: TcpConnection) -> bool:
     return is_localhost_endpoint(conn.display_foreign or conn.foreign)
 
 
-def without_localhost_destinations(snapshot: Snapshot) -> Snapshot:
+def without_ignored_connections(snapshot: Snapshot) -> Snapshot:
     return replace(
         snapshot,
-        connections=[c for c in snapshot.connections if not is_localhost_destination(c)],
+        connections=[
+            c
+            for c in snapshot.connections
+            if c.state != "LISTEN" and not is_localhost_destination(c)
+        ],
     )
 
 
@@ -1023,7 +1027,7 @@ class TuiApp:
         """Read provider data and merge it into the stable slot table."""
         try:
             self.previous_for_delta = self.latest
-            self.latest = without_localhost_destinations(self.provider.snapshot())
+            self.latest = without_ignored_connections(self.provider.snapshot())
             self.slots.update(
                 self.latest,
                 self.previous_for_delta,
@@ -1429,7 +1433,7 @@ Keys
 ----
 
   h       Open this help in less.
-  a       Toggle active rows vs all rows. Active mode hides LISTEN/TIME_WAIT.
+  a       Toggle active rows vs all rows. Active mode hides TIME_WAIT.
   q       Quit.
   Esc     Quit.
 
@@ -1991,7 +1995,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("-i", "--interval", type=float, default=1.0, help="refresh interval seconds")
     parser.add_argument("-n", "--limit", type=int, default=40, help="maximum rows to print with --once")
-    parser.add_argument("--all", action="store_true", help="start by showing LISTEN/TIME_WAIT rows too")
+    parser.add_argument("--all", action="store_true", help="start by showing TIME_WAIT rows too")
     parser.add_argument("--once", action="store_true", help="print one snapshot and exit")
     parser.add_argument("--backend", choices=("netstat", "native"), default="netstat", help="collection backend")
     parser.add_argument("--netstat", default="", help="path to netstat binary")
@@ -2015,7 +2019,7 @@ def main(argv: list[str]) -> int:
 
     try:
         if args.once:
-            snapshot = without_localhost_destinations(provider.snapshot())
+            snapshot = without_ignored_connections(provider.snapshot())
             print(render_once(snapshot, limit=args.limit))
             return 1 if snapshot.errors else 0
 
