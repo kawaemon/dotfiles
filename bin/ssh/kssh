@@ -61,7 +61,7 @@ def main():
     if choosen.password:
         command = f"sshpass -f <({choosen.password}) " + command
     else:
-        command =  "\\" + command
+        command =  command + " " + " ".join(sys.argv[2:])
 
     if choosen.legacy:
         command += LEGACY
