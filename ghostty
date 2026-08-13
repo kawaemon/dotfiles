@@ -1,5 +1,6 @@
 # ───── Font ─────
 font-family = JetBrainsMono Nerd Font Mono
+font-family = Hiragino Sans
 font-style = ExtraLight
 font-size = 22
 
@@ -23,13 +24,13 @@ palette = 6=2aa198
 palette = 7=eee8d5
 
 # Bright (8–15)
-palette = 8=576466
+palette = 8=002b36
 palette = 9=cb4b16
-palette = 10=9db500
-palette = 11=b58900
-palette = 12=839496
+palette = 10=6a7524
+palette = 11=866b22
+palette = 12=386da2
 palette = 13=6c71c4
-palette = 14=93a1a1
+palette = 14=356964
 palette = 15=fdf6e3
 
 # ───── Window ─────
