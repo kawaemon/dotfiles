@@ -12,11 +12,6 @@
 [includeIf "gitdir:~/repo/github.com/C-Style-team/"]
     path = ~/repo/github.com/kawaemon/dotfiles/git/work-profile/c-style
 
-[includeIf "gitdir:~/repo/github.com/yumemi/"]
-    path = ~/repo/github.com/kawaemon/dotfiles/git/work-profile/yumemi
-[includeIf "gitdir:~/repo/github.com/yumemi-inc/"]
-    path = ~/repo/github.com/kawaemon/dotfiles/git/work-profile/yumemi
-
 [includeIf "gitdir:~/repo/github.com/sfc-rgroot/"]
     path = ~/repo/github.com/kawaemon/dotfiles/git/work-profile/rg
 
