@@ -66,5 +66,7 @@ fi
 # force use emacs mode
 # zsh infers key mode by EDITOR
 bindkey -e
+# '/' as word separator
+typeset -g WORDCHARS=${WORDCHARS:s@/@}
 
 tm
