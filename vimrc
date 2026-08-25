@@ -43,6 +43,7 @@ set matchpairs+=<:>
 colorscheme slate
 
 let g:man_hardwrap = 0
+let g:netrw_liststyle = 3
 
 nnoremap <Up> <Nop>
 nnoremap <Down> <Nop>

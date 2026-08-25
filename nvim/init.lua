@@ -8,6 +8,8 @@ if not lightweight then
     require("kplugin")
 end
 
+require("knetrw")
+
 vim.opt.tabstop = 4
 vim.opt.shiftwidth = 4
 vim.opt.expandtab = true
