@@ -381,6 +381,10 @@ syntax['TSLiteral'] = syntax['Normal']
 syntax['TSParameter'] = syntax['Identifier']
 -- syntax['TSVariable'] = {fg=colors.base0}
 syntax['TSVariable'] = {fg=colors.base0}
+-- neovim's builtin default highlight groups don't define a fallback link for
+-- '@variable' (unlike '@function'/'@keyword'/etc which link to Function/Keyword/etc),
+-- so without this it renders in neovim's default near-white color instead of Normal's fg.
+syntax['@variable'] = {fg=colors.base0}
 syntax['TSVariableBuiltin'] = syntax['Identifier']
 syntax['TSTag'] = syntax['Special']
 syntax['TSTagDelimiter'] = syntax['Delimiter']
