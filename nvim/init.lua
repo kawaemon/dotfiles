@@ -9,6 +9,15 @@ if not lightweight then
 end
 
 require("knetrw")
+require("kfzf")
+
+-- keybind cheatsheet
+-- knetrw:
+--   <C-n>     toggle file tree
+--   :Tree     toggle file tree
+-- kfzf:
+--   <C-p>     fuzzy find files (requires fzf)
+--   :Files    fuzzy find files (requires fzf)
 
 vim.opt.tabstop = 4
 vim.opt.shiftwidth = 4
