@@ -104,9 +104,13 @@ vim.api.nvim_create_autocmd("FocusLost", {
 })
 
 local function def_alias(name, cmd)
-    vim.api.nvim_create_user_command(name, function()
-        vim.cmd(cmd)
-    end, {})
+    vim.api.nvim_create_user_command(
+        name,
+        function(opts)
+            vim.cmd(cmd .. (opts.bang and "!" or "") .. (opts.args ~= "" and " " .. opts.args or ""))
+        end,
+        { bang = true, nargs = "*" }
+    )
 end
 
 def_alias("W", "w")
