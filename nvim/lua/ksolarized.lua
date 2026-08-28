@@ -64,6 +64,7 @@ end
 
 local syntax = {}
 syntax['Normal'] = {fg=colors.base0,bg=termtrans(colors.base03)}
+syntax['NormalFloat'] = syntax['Normal']
 syntax['CursorLine'] = {fg=colors.none,bg=termtrans(colors.base02)}
 syntax['Terminal'] = syntax['Normal']
 syntax['ToolbarButton'] = {fg=colors.base1,bg=termtrans(colors.base02),style='bold'}
