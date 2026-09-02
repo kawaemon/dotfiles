@@ -6,12 +6,6 @@ function dockerawslogin() {
     aws ecr get-login-password --region $region | \
         docker login --username AWS --password-stdin $accountid.dkr.ecr.$region.amazonaws.com
 }
-function tm() {
-    if [[ "$TERM_PROGRAM" != "vscode" && -z "$TMUX" ]]; then
-        tmux
-    fi
-}
-
 # man zshoptions
 setopt nomatch \
        automenu \
@@ -34,6 +28,13 @@ unsetopt beep
 
 zstyle ':completion:*' menu select=5 # highlight selection in menu
 
+# force to use emacs mode
+# zsh infers default keymode by EDITOR
+bindkey -e
+
+# '/' as word separator
+typeset -g WORDCHARS=${WORDCHARS:s@/@}
+
 export MANPAGER='nvim +Man!'
 export MANWIDTH=999
 
@@ -55,6 +56,7 @@ source ~/.zr.zsh
 autoload -U compinit && compinit
 
 source <(mise activate zsh)
+source <(fzf --zsh)
 
 if command -v kubectl >/dev/null 2>&1; then
   source <(kubectl completion zsh)
@@ -63,10 +65,6 @@ if command -v rustup >/dev/null 2>&1; then
   source <(rustup completions zsh)
 fi
 
-# force use emacs mode
-# zsh infers key mode by EDITOR
-bindkey -e
-# '/' as word separator
-typeset -g WORDCHARS=${WORDCHARS:s@/@}
-
-tm
+if [[ "$TERM_PROGRAM" != "vscode" && -z "$TMUX" ]]; then
+    tmux
+fi
