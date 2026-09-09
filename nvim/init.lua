@@ -10,6 +10,7 @@ end
 
 require("knetrw")
 require("kfzf")
+require("kgit")
 
 -- keybind cheatsheet
 -- knetrw:
@@ -18,6 +19,8 @@ require("kfzf")
 -- kfzf:
 --   <C-p>     fuzzy find files (requires fzf)
 --   :Files    fuzzy find files (requires fzf)
+-- kgit:
+--   git-gutter signs, updates on save/enter/focus
 
 vim.opt.tabstop = 4
 vim.opt.shiftwidth = 4
