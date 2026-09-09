@@ -31,21 +31,38 @@ local colors = {
     -- err_bg = {'#fdf6e3',231}
 }
 
+local style_attrs = {
+    bold = 'bold',
+    italic = 'italic',
+    underline = 'underline',
+    reverse = 'reverse',
+    standout = 'standout',
+}
+
 function highlighter(group, colors)
     -- setup funtion
-    colors.guisp = colors.guisp or 'none'
-    colors.style = colors.style or 'none'
+    -- nvim_set_hl treats the string "none" as "unset" for every field below,
+    -- same as vimscript's `hi ... guifg=none`, so it can be passed through
+    -- as-is without filtering it out ourselves.
     colors.bg = colors.bg or {'none', 'none'}
-    local g_foreground = colors.fg[1]
-    local c_foreground = colors.fg[2]
-    local g_background = colors.bg[1]
-    local c_background = colors.bg[2]
-    local guisp = colors.guisp[1] or 'none'
+    local guisp = colors.guisp and colors.guisp[1] or 'none'
     local style = colors.style or 'none'
-    vim.cmd(string.format(
-        'hi %s guifg=%s guibg=%s guisp=%s gui=%s ctermfg=%s ctermbg=%s cterm=%s',
-        group, g_foreground, g_background, guisp, style, c_foreground, c_background, style
-    ))
+
+    local hl = {
+        fg = colors.fg[1],
+        bg = colors.bg[1],
+        sp = guisp,
+        ctermfg = colors.fg[2],
+        ctermbg = colors.bg[2],
+    }
+    for part in style:gmatch('[^,]+') do
+        local attr = style_attrs[part]
+        if attr then
+            hl[attr] = true
+        end
+    end
+
+    vim.api.nvim_set_hl(0, group, hl)
 end
 function termtrans(color)
     if vim.g.solarized_termtrans == 1 then
