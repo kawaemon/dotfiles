@@ -427,9 +427,9 @@ syntax['LspReferenceWrite'] = {fg=colors.none,style='underline,bold'}
 syntax['LspSagaFinderSelection'] = syntax['Search']
 syntax['TargetWord'] = syntax['Title']
 
-syntax['GitSignsAdd'] = syntax['DiffAdd']
-syntax['GitSignsChange'] = syntax['DiffChange']
-syntax['GitSignsDelete'] = syntax['DiffDelete']
+syntax['GitSignsAdd'] = {fg=colors.base03, bg=colors.green}
+syntax['GitSignsChange'] = {fg=colors.base03, bg=colors.yellow}
+syntax['GitSignsDelete'] = {fg=colors.base03, bg=colors.red}
 
 syntax['VGitSignAdd'] = syntax['DiffAdd']
 syntax['VgitSignChange'] = syntax['DiffChange']

@@ -1,6 +1,9 @@
 -- skips plugin installation
 local lightweight = true
 
+vim.g.mapleader = " "
+vim.g.maplocalleader = " "
+
 vim.opt.fileencodings = "utf-8,cp932,sjis"
 vim.loader.enable()
 
@@ -21,6 +24,8 @@ require("kgit")
 --   :Files    fuzzy find files (requires fzf)
 -- kgit:
 --   git-gutter signs, updates on save/enter/focus
+--   K           preview hunk under cursor (falls back to normal K if none)
+--   :GitPreviewHunk
 
 vim.opt.tabstop = 4
 vim.opt.shiftwidth = 4
