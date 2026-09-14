@@ -1,0 +1,26 @@
+onboarding = false
+
+[theme]
+name = "solarized"
+
+[keys]
+prefix = "ctrl+q"
+
+# tmux.conf: w splits stacked (== herdr's split_horizontal), freeing
+# prefix+w from the workspace picker, which tmux.conf doesn't use either.
+split_horizontal = "prefix+w"
+workspace_picker = ""
+
+# tmux.conf: capital H/J/K/L resize panes instead of swapping them.
+resize_pane_left = "prefix+shift+h"
+resize_pane_down = "prefix+shift+j"
+resize_pane_up = "prefix+shift+k"
+resize_pane_right = "prefix+shift+l"
+swap_pane_left = ""
+swap_pane_down = ""
+swap_pane_up = ""
+swap_pane_right = ""
+
+# tmux.conf: C-h/C-l switch windows (herdr tabs).
+previous_tab = ["prefix+p", "prefix+ctrl+h"]
+next_tab = ["prefix+n", "prefix+ctrl+l"]
