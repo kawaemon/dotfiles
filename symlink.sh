@@ -50,6 +50,9 @@ ln -sfv $PWD/herdr.toml $HOME/.config/herdr/config.toml
 mkdir -p $HOME/.config/omniwm/
 ln -sfv $PWD/omniwm.toml $HOME/.config/omniwm/settings.toml
 
+mkdir -p $HOME/.config/herdr/
+ln -sfv $PWD/herdr.toml $HOME/.config/herdr/config.toml
+
 mkdir -p $HOME/.local/bin
 ln -sfv $PWD/bin/netcheck/netcheck $HOME/.local/bin/netcheck
 ln -sfv $PWD/bin/ssh/kssh $HOME/.local/bin/kssh
