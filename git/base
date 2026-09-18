@@ -62,6 +62,7 @@
 [diff]
     algorithm = histogram
     colorMoved = dimmed-zebra
+    colorMovedWS = allow-indentation-change
     mnemonicPrefix = true
     renames = true
 
